@@ -12,8 +12,19 @@ River will be a reverse proxy application, utilizing the `pingora` reverse proxy
 
 The primary behavior of a reverse proxy application is to act as an intermediary between downstream clients and upstream servers, terminating TLS for inbound connections if in use. The reverse proxy application may decide to accept or reject the connection at any point, and may decide to modify messages at any point.
 
-
-**TODO PICTURE HERE**
+```text
+┌────────────┐          ┌─────────────┐         ┌────────────┐
+│ Downstream │       ┌ ─│─   Proxy  ┌ ┼ ─       │  Upstream  │
+│   Client   │─────────▶│ │           │──┼─────▶│   Server   │
+└────────────┘       │  └───────────┼─┘         └────────────┘
+                      ─ ─ ┘          ─ ─ ┘
+                        ▲              ▲
+                     ┌──┘              └──┐
+                     │                    │
+                ┌ ─ ─ ─ ─ ┐         ┌ ─ ─ ─ ─ ─
+                 Listeners           Connectors│
+                └ ─ ─ ─ ─ ┘         └ ─ ─ ─ ─ ─
+```
 
 *Figure 1: Proxying Behavior*
 
@@ -23,7 +34,22 @@ The primary behavior of a reverse proxy application is to act as an intermediary
 
 River operates by listening to one or more downstream Listener interfaces, accepting connections from clients.
 
-**TODO: Diagram showing many-listeners to one-service**
+```text
+┌────────────┐
+│ Downstream │
+│   Client   │───┐
+└────────────┘   │
+┌────────────┐   │   ┌─────────────┐       ┌─────────────┐
+│ Downstream │   │   │  Listener   │       │    Proxy    │
+│   Client   │───┼──▶│             │──────▶│             │
+└────────────┘   │   └─────────────┘       └─────────────┘
+┌────────────┐   │
+│ Downstream │   │
+│   Client   │───┘
+└────────────┘
+```
+
+*Figure 2: Listeners*
 
 1. River MUST accept connections via:
     1. Unix Domain Sockets
@@ -46,7 +72,24 @@ River operates by listening to one or more downstream Listener interfaces, accep
 
 River operates by making and maintaining connections to one or more upstream services, forwarding messages from clients.
 
-**TODO: Diagram showing one-service to one-of-many connections**
+```text
+                                           ┌ ─ ─ ─ ─ ─ ─ ─ ─
+                                             ┌────────────┐ │
+                                           │ │  Upstream  │
+                                        ┌───▶│   Server   │ │
+                                        │  │ └────────────┘
+┌─────────────┐       ┌─────────────┐   │    ┌────────────┐ │
+│    Proxy    │       │  Connector  │   │  │ │  Upstream  │
+│             │──────▶│             │───┘    │   Server   │ │
+└─────────────┘       └─────────────┘      │ └────────────┘
+                                             ┌────────────┐ │
+                                           │ │  Upstream  │
+                                             │   Server   │ │
+                                           │ └────────────┘
+                                            ─ ─ ─ ─ ─ ─ ─ ─ ┘
+```
+
+*Figure 3: A connector communicating with 1/N upstream servers*
 
 1. River MUST support a configurable Time To Live (TTL) for DNS lookups
 2. River MUST support a configurable timeouts for:
