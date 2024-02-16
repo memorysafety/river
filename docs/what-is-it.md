@@ -4,9 +4,19 @@ This is a document that is intended to describe WHAT River is, without discussin
 
 This document is intended for potential users of the River application, with a secondary goal of serving as a "big picture" view for implementers.
 
+The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL
+NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED",
+"MAY", and "OPTIONAL" in this document are to be interpreted as
+described in [BCP 14] [RFC2119] [RFC8174] when, and only when, they
+appear in all capitals, as shown here.
+
+[BCP 14]: https://www.rfc-editor.org/info/bcp14
+[RFC2119]: https://datatracker.ietf.org/doc/html/rfc2119
+[RFC8174]: https://datatracker.ietf.org/doc/html/rfc8174
+
 ## 1 - Abstract
 
-River will be a reverse proxy application, utilizing the `pingora` reverse proxy engine from Cloudflare. It will be written in Rust. It will be configurable, allowing for options including routing, filtering, and modification of proxied requests.
+River is a reverse proxy application under design, utilizing the `pingora` reverse proxy engine from Cloudflare. It will be written in Rust. It will be configurable, allowing for options including routing, filtering, and modification of proxied requests.
 
 ## 2 - Functional Description
 
@@ -109,6 +119,30 @@ River operates by making and maintaining connections to one or more upstream ser
 
 ### 2.3 - Upstream Service Discovery
 
+```text
+                                           ┌────────────────┐
+                                           │Upstream Server │
+                             ┌────────────▶│ Listing Source │
+                             │             └────────────────┘
+                          Service
+                         Discovery         ┌ ─ ─ ─ ─ ─ ─ ─ ─
+                          Requests           ┌────────────┐ │
+                             │             │ │  Upstream  │
+                             │          ┌───▶│   Server   │ │
+                             ▼          │  │ └────────────┘
+┌─────────────┐       ┌─────────────┐   │    ┌────────────┐ │
+│    Proxy    │       │  Connector  │   │  │ │  Upstream  │
+│             │──────▶│             │───┘    │   Server   │ │
+└─────────────┘       └─────────────┘      │ └────────────┘
+                             │               ┌────────────┐ │
+                        Server List        │ │  Upstream  │
+                          Update             │   Server   │ │
+                                           │ └────────────┘
+                             └ ─ ─ ─ ─ ─ ─▶ ─ ─ ─ ─ ─ ─ ─ ─ ┘
+```
+
+*Figure 4: Using Service Discovery to update the list of upstream servers*
+
 River allows for the configurable runtime discovery of upstream servers, in order to dynamically handle changing sets of upstream servers without requiring a restart or reconfiguration of the application.
 
 1. River MUST support the use of a fixed list of upstream servers
@@ -122,9 +156,28 @@ River allows for the configurable runtime discovery of upstream servers, in orde
 
 River allows for configurable behavior modifiers at multiple stages in the request and response process. These behaviors allow for the modification or rejection of messages exchanged in either direction between downstream client and upstream server
 
-**TODO: Diagram goes here**
+```text
+             ┌ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┐  ┌ ─ ─ ─ ─ ─ ─ ┐
+                  ┌───────────┐    ┌───────────┐    ┌───────────┐
+             │    │  Request  │    │           │    │  Request  │    │  │             │
+ Request  ═══════▶│  Arrival  │═══▶│Which Peer?│═══▶│ Forwarded │═══════▶
+             │    │           │    │           │    │           │    │  │             │
+                  └───────────┘    └───────────┘    └───────────┘
+             │          │                │                │          │  │             │
+                        │                │                │
+             │          ├───On Error─────┼────────────────┤          │  │  Upstream   │
+                        │                │                │
+             │          │          ┌───────────┐    ┌───────────┐    │  │             │
+                        ▼          │ Response  │    │ Response  │
+             │                     │Forwarding │    │  Arrival  │    │  │             │
+ Response ◀════════════════════════│           │◀═══│           │◀═══════
+             │                     └───────────┘    └───────────┘    │  │             │
+               ┌────────────────────────┐
+             └ ┤ Simplified Phase Chart │─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┘  └ ─ ─ ─ ─ ─ ─ ┘
+               └────────────────────────┘
+```
 
-Figure 2: Request Path Lifecycle
+*Figure 5: Request Path Lifecycle*
 
 1. River MUST support modifying or rejecting a connection at any of the following stages:
     1. Downstream Request Arrival
@@ -132,8 +185,8 @@ Figure 2: Request Path Lifecycle
     3. Upstream Request Forwarding
     4. Upstream Response Arrival
     5. Downstream Request Forwarding
-    6. (todo: response body filter stage?) - these are for “chunks”
-    7. TODO: maybe ADD a request body filter
+    6. Request Body (partial request fragments)
+    7. Response Body (partial response fragments)
 2. River MUST support rejecting a connection by returning an error response
 3. River MUST support CIDR/API range-based filtering allow and deny lists
 4. River MUST support rate limiting of requests or response on the basis of one or more of the following:
@@ -171,22 +224,41 @@ River MUST provide methods for configuration in order to control the behavior of
     1. Command Line Options (highest priority)
     2. Environment Variable Options
     3. Configuration File Options (lowest priority)
-8. TODO: How to configure + command hot-reloads?
 
 ### 2.7 - Environmental Requirements
 
 These requirements relate to the supported execution environment(s) of the application.
 
-1. The application shall support execution in a Linux environment
-    2. TODO: minimum kernel version? Additional details?
-2. The application shall support execution without “root” or “administrator” privileges
-3. The application shall support execution within a container
+1. The application MUST support execution in a Linux environment
+2. The application MAY support execution in operating systems such as MacOS, Windows, or Redox OS.
+3. The application MUST support execution within a container
+4. The application MUST support two stages of execution:
+    1. The first stage MUST execute with the user and group used to launch the application, and perform initial setup steps
+    2. The second stage MUST be forked from the first stage, executing with the user and group specified in the application configuration
+5. The application MUST support execution without "root" or "administrator" privileges, given that:
+    1. The user and group used to launch the application has the capability to fork the second stage
+    2. The user and group used to fork the second stage has capabilities necessary for steady state operation.
 
-### 2.x - What else?
+### 2.8 - Graceful Reloading
 
-Collecting things that still need a final space
+These requirements relate to the feature of "graceful reloading" - allowing for stopping one instance (referred to as the "Old" instance) of the application and the starting of a second instance (referred to as the "New" instance), handing off existing connections where possible.
 
-1. Automatic ACME/cert provisioning
-2. Rustls support
-3. Specification
-4. Graceful restarts
+1. The application MUST support the passing of open Listeners from one instance of the application to another.
+2. The application MUST support the configuration of an upgrade socket used for both giving and receiving the current Listeners.
+3. The application MUST allow for a configurable period of time before the termination of in-flight requests handled by the "Old" instance.
+4. The application MUST allow for a configurable period of time before the termination of active connections handled by the "Old" instance if unable to transfer to the "New" instance.
+5. The "Old" instance of the application MUST terminate after all in-flight requests and active connections have been transferred to the "New" instance or have been closed after timing out.
+
+### 2.9 - Certificate Provisioning and Management
+
+These requirements relate to the features of obtaining or renewing TLS certificates automatically without user interaction.
+
+1. The application MUST support the use of the Automatic Certificate Management Environment (ACME) protocol to obtain new TLS certificates.
+2. The application MUST support the use of ACME protocol to renew TLS certificates.
+3. The application MUST support the configuration of domain names to be managed (including obtaining and renewal steps) automatically
+4. The application MUST support both fully qualified and wildcard domains.
+5. The application MUST support configuration of certificate renewal interval, from either:
+    1. The number of days since the certificate was acquired
+    2. The number of days until the certificate will expired
+6. The application MUST support API Version 2 of the ACME protocol
+7. The application MAY support API Version 1 of the ACME protocol
