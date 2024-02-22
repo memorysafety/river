@@ -143,6 +143,9 @@ This work is primarily in two parts:
 1. Adding support for relevant Service Discovery protocols
 2. Making the load balancing algorithm(s) aware of these changes
 
+This work will also need to be designed in tandem with Configuration, making it possible to
+specify the desired service discovery options in a declarative way.
+
 ### 4.4 - Request Path Control
 
 Proxy Customization Options, allowing an operator to specifies customization of behaviors applied
@@ -161,6 +164,10 @@ Implementers are suggested to pick reasonable, safe defaults, with the goal that
 with no configuration effort always being an acceptable (if not ideal) choice with respect to
 security and performance.
 
+It is likely that there will be additional feature requests in this area in the future, beyond the
+initial requirements, including functionality such as checking authentication prior to proxying.
+Care should be taken with respect to future extensibility.
+
 This work will also need to be designed in tandem with Configuration, making it possible to
 specify the desired request path control options in a declarative way.
 
@@ -169,6 +176,18 @@ specify the desired request path control options in a declarative way.
 An observability system, allowing operators to inspect and make observations about the running
 system, both in an exploratory way as a human, as well as an automated way as part of a larger
 monitoring system.
+
+Currently, `pingora` uses the `log` ecosystem in Rust. It may be worth investigating switching to
+`tracing`, or using an integration with the `tracing` ecosystem.
+
+There are a number of existing integrations for push based aggregation systems (e.g. OpenTracing or
+OpenTelemetry), or pull based aggregation systems (e.g. Prometheus).
+
+Metrics may also be emitted as structured fields via the same infrastructure.
+
+This work will also need to be designed in tandem with Configuration, making it possible to
+specify the desired log/trace level and metrics calculation options in a declarative way.
+
 
 ### 4.6 - Configuration
 
@@ -179,8 +198,77 @@ options.
 System-wide Performance and Resource Options, describing things like rate limiting, connection
 pooling behaviors, timeouts and back-offs, and other similar parameters.
 
+Together with Request Path Control, the design and implementation of the configuration system is
+likely to be a significant part of the integration work. This is for two main reasons:
+
+1. The configuration system is required to configure quite a bit of complexity, exposing a wide
+   array of dials
+2. The configuration system is largely the "user interface" of the system - meaning people will have
+   strong opinions on how it should function.
+
+In the future, there will likely be a need for a scripting interface, or integrated scripting
+language/runtime, such as Rhai, WASM, or others.
+
+Until then, it's recommended to be as conservative as possible in what can be done with the
+configuration file, in order to meet the necessary feature set.
+
+As configuration is the primary user interface, care should be taken to help users understand
+the impact of their configuration choices.
+
 ### 4.7 - Environmental Requirements
 
+In general, River is intended to be run on a Linux system for production usage. This maybe be on
+"bare metal", in a virtual machine, or in a containerized environment.
 
-A Service Discovery System, allowing for runtime updates of the list of potential upstream servers
-to connect to.
+The `pingora` engine allows for a "two stage" start, the first runs at whatever the user/group
+context that was used to launch the program. This can be used to enable a greater level of access
+such as loading secrets or configuration files from the filesystem. Once this "setup" phase is
+completed, the program is forked, and "steady state" is launched using the user and group that was
+configured.
+
+It is not expected to require any additional work to support this use case - it is already
+supported by `pingora` itself. However any code that wraps `pingora` may need to keep this
+operational model in mind.
+
+### 4.8 - Graceful Reloading
+
+Graceful reloading allows operators to stop, reconfigure, and restart the River server, with minimal
+or no visible downtime to downstream clients.
+
+This capability is important, as other than Upstream Service Discovery, no other way is provided
+to change configuration of operational River instances. This approach was chosen largely because:
+
+1. This is the model chosen by `pingora`
+2. It greatly simplifies logic - as we don't need to worry about "cache invalidation" of
+   configuration or other settings.
+
+It is not expected to require any additional work to support this use case - it is already
+supported by `pingora` itself. However any code that wraps `pingora` may need to keep this
+capability/working model in mind.
+
+### 4.9 - Certificate Provisioning and Management
+
+There is desire for River to be able to automatically provision certificates for domains served
+by it. This presents as two major capabilities:
+
+1. Obtaining a new certificate - on first run, it will be necessary to obtain a certificate before
+   serving any TLS secured traffic
+2. Renewing an existing certificate - in steady state, it will be necessary to periodically (on the
+   order of weeks/months) renew a certificate, and replace old ones with new ones.
+
+By having the reverse proxy perform this step automatically, it avoids the need to have manual or
+other setups in order to deploy or manage the reverse proxy, such as one-shot or scheduled container
+runs.
+
+For new certificates: It is likely (though unspecified) how this should be achieved. It is likely
+that if configured to obtain/manage certificates automatically, and none exist, this should be
+performed BEFORE serving traffic for the relevant listeners.
+
+For existing certificates: It is unspecified whether renewing certificates is something that should
+be done "in flight", or whether it requires a graceful reload to occur.
+
+In both cases, care should be taken (and documentation) should make it clear how these features
+interact with potentially unprivileged "steady state" operational modes.
+
+Where it is not possible to handle this "in flight", reference examples should be provided to
+document how users are expected to setup their systems correctly.

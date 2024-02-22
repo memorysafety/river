@@ -123,13 +123,12 @@ messages from clients.
 2. River MUST support a configurable timeouts for:
     1. Connections
     2. Requests
+    3. Successful health checks
 3. River MUST support pooling of connections, including:
     1. Reuse of TCP sessions for all HTTP versions
     2. Reuse of HTTP2.0 streams for HTTP2.0
 4. River MUST support health checks of upstream servers
-    1. **TODO: “Configurable TTL override & cache drop upon health check failure for backends'
-       hostnames in DNS. (i.e. allow lower TTLs than the DNS standard; re-resolve DNS if health
-       checks fail)”**
+5. River MUST support the disabling of use of an upstream server based on failed health checks
 5. River MUST support load balancing of upstream servers
 6. River MUST support sending information for protocols used for pre-proxying, including:
     1. v1 and v2 of the PROXY protocol
@@ -173,9 +172,8 @@ application.
    given service
 3. River MUST support the use of SRV records to provide a list of upstream servers for a given
    service
-4. **TODO: xDS?**
-5. River MUST have a configurable timeout for re-polling poll-based service discovery mechanisms
-6. River MUST support the use of DNS TTL as timeout value for re-polling poll-based service
+4. River MUST have a configurable timeout for re-polling poll-based service discovery mechanisms
+5. River MUST support the use of DNS TTL as timeout value for re-polling poll-based service
    discovery mechanisms
 
 ### 2.4 - Request Path Control
@@ -217,18 +215,18 @@ direction between downstream client and upstream server
     7. Response Body (partial response fragments)
 2. River MUST support rejecting a connection by returning an error response
 3. River MUST support CIDR/API range-based filtering allow and deny lists
-4. River MUST support rate limiting of requests or response on the basis of one or more of the
-   following:
-    1. TODO
-5. River MUST support removal of HTTP headers on a glob or regex matching basis
-6. River MUST support addition of fixed HTTP headers to a request
-7. TODO: Do we need some kind of metadata/template/context based content matching or filling?
-8. TODO: Normalization of headers/bodies?
-    1. EX: URL/URI normalization using browser rules
-    2. Some kind of OWASP list for this?
-9. TODO: Support External Authentication Requests?
-    * Make subrequest to auth provider - NGINX (free module, maybe 3rd party? - need the name)
-    * <https://nginx.org/en/docs/http/ngx_http_auth_request_module.html>
+4. River MUST support rate limiting of requests or responses on the basis of one or
+   more of the following:
+    1. A fixed rate per second
+    2. A "burst" rate - allowing for short increases above the fixed rate
+5. River MUST support application of rate limiting of requests or responses on the per-endpoint
+   basis.
+6. River MUST support removal of HTTP headers on a glob or regex matching basis
+7. River MUST support addition of fixed HTTP headers to a request
+8. River MUST support the normalization of request and response headers and bodies, including:
+    1. URI normalization
+    2. Text encoding
+
 
 ### 2.5 - Observability
 
@@ -311,3 +309,81 @@ without user interaction.
     2. The number of days until the certificate will expired
 6. The application MUST support API Version 2 of the ACME protocol
 7. The application MAY support API Version 1 of the ACME protocol
+
+## 3 - Development Practices
+
+The following are development practice requirements for initial implementers of River.
+
+### 3.1 - Documentation Practices
+
+These requirements relate to the technical documentation of River.
+
+1. The implementers MUST maintain complete developer-facing documentation, or "doc comments"
+    1. This MAY be achieved using the `#![deny(missing_docs)]` directive or similar flags in CI
+       testing
+2. The implementers MUST maintain a separate user-facing documentation, describing usage,
+   configuration, installation, and other details and examples.
+    1. This MAY be achieved using a tool such as `mdBook`, creating a user facing "Book" for River
+3. The implementers MUST automatically publish the developer- and user- facing documentation for
+   all released versions
+4. The implementers MUST automatically publish the developer- and user- facing documentation for
+   the main development branch
+    1. This MAY be on a per-pull request basis, or on a scheduled basis e.g. once per day.
+5. The implementers MUST document how to build developer- and user- facing documentation
+
+### 3.2 - Benchmarking Practices
+
+These requirements relate to the performance benchmarking of River. No specific performance
+metrics are required or specified here, instead weight is placed on measurements over time, allowing
+improvements or regressions to be visible and measurable throughout the development process.
+
+1. The implementers MUST maintain a test suite of performance tests, expected to exercise:
+    1. Typical Use Cases
+    2. Unusual or "Worst Case" use cases
+    3. Use cases previously reported as performance regressions
+2. The implementers MUST run and record the results of performance tests on a regular basis, such
+   as on every pull request, or on a scheduled daily/weekly basis.
+3. The performance tests MUST track the following metrics:
+    1. Peak and Average CPU usage during test execution
+    2. Peak and Average Memory usage during test execution
+    3. CPU and Wall Clock time of test execution
+4. The performance tests MAY track the following "perf counter" metrics:
+    1. Branch prediction failures
+    2. Page faults
+    3. Cache Misses
+    4. Context Switches
+5. The implementers MUST document how to build and execute performance tests
+6. The implementers MAY provide a suite of comparison tests, executing a subset of performance tests
+   against contemporary reverse proxy applications, such as NGINX or Apache.
+
+### 3.3 - Continuous Integration Practices
+
+These requirements document tooling practices expected for the development of River.
+
+1. The implementers MUST provide a set of automated checks that are required to pass prior to merges
+   to the main development branch. These automated checks MAY include:
+    1. Code Formatting checks, e.g. `cargo fmt`
+    2. Code linting checks, e.g. `cargo clippy`
+    3. Unit test execution, e.g. `cargo test`
+    4. Documentation build steps (for user- and developer- facing documentation)
+    5. Integration test execution
+    5. Performance test execution
+2. The implementers MUST provide a set of automated checks that are required to run on a periodic
+   basis. These automated checks MAY include:
+    1. Building against the latest stable, beta, or nightly versions of the Rust compiler and
+       toolchain
+    2. Performance test execution
+    3. Documentation build steps
+    4. Documentation publishing steps
+2. The implementers MUST provide and document the process for running all automated checks locally,
+   in order to allow contributors to perform these checks prior to submitting a Pull Request.
+
+### 3.4 - Contribution Practices
+
+1. The implementers MUST provide and enforce a Code of Conduct for contribution
+    1. The implementors MAY use the [Contributor Covenant] to achieve this goal
+2. The implementers MUST provide and maintain a Contribution guide for third party contributions
+3. The implementers MUST provide and maintain a security policy, to allow for private disclosure
+   of vulnerabilities
+
+[Contributor Covenant]: https://www.contributor-covenant.org/version/1/3/0/code-of-conduct/
