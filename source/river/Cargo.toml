@@ -27,3 +27,10 @@ all-features = true
 rustdoc-args = ["--cfg", "doc_cfg"]
 
 [dependencies]
+
+[dependencies.pingora]
+# NOTE: For now we are tracking the git repo. We'll need
+# to switch back to published versions before publishing
+# river. We can coordinate with the `pingora` team for this.
+git = "https://github.com/cloudflare/pingora"
+rev = "0de54eb9071a9c4baccc6bad7acad11e9c54186f"
