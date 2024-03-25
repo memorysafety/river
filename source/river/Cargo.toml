@@ -1,0 +1,36 @@
+[package]
+name = "river"
+
+# VERSION NOTE:
+#
+# We need to start our numbering at 0.2.0, as there was a parked
+# crate published using 0.1.0. We should yank that version and
+# remove this comment block when publishing v0.2.0.
+version = "0.2.0"
+
+authors = ["James Munns <james@onevariable.com>"]
+edition = "2021"
+readme = "../../README.md"
+repository = "https://github.com/memorysafety/river"
+description = "A reverse proxy application, based on the pingora library from Cloudflare"
+license = "Apache-2.0"
+categories = [
+
+]
+keywords = [
+    "proxy",
+]
+documentation = "https://docs.rs/river/"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "doc_cfg"]
+
+[dependencies]
+
+[dependencies.pingora]
+# NOTE: For now we are tracking the git repo. We'll need
+# to switch back to published versions before publishing
+# river. We can coordinate with the `pingora` team for this.
+git = "https://github.com/cloudflare/pingora"
+rev = "0de54eb9071a9c4baccc6bad7acad11e9c54186f"
