@@ -1,23 +1,25 @@
 [package]
-name = "river"
+name          = "river"
 
 # VERSION NOTE:
 #
 # We need to start our numbering at 0.2.0, as there was a parked
 # crate published using 0.1.0. We should yank that version and
 # remove this comment block when publishing v0.2.0.
-version = "0.2.0"
+version       = "0.2.0"
 
-authors = ["James Munns <james@onevariable.com>"]
-edition = "2021"
-readme = "../../README.md"
-repository = "https://github.com/memorysafety/river"
-description = "A reverse proxy application, based on the pingora library from Cloudflare"
-license = "Apache-2.0"
-categories = [
+authors       = [
+    "James Munns <james@onevariable.com>",
+]
+edition       = "2021"
+readme        = "../../README.md"
+repository    = "https://github.com/memorysafety/river"
+description   = "A reverse proxy application, based on the pingora library from Cloudflare"
+license       = "Apache-2.0"
+categories    = [
 
 ]
-keywords = [
+keywords      = [
     "proxy",
 ]
 documentation = "https://docs.rs/river/"
@@ -27,6 +29,20 @@ all-features = true
 rustdoc-args = ["--cfg", "doc_cfg"]
 
 [dependencies]
+tracing = "0.1.40"
+
+[dependencies.tracing-subscriber]
+version  = "0.3.18"
+features = [
+    "fmt",
+    "tracing-log",
+]
+
+[dependencies.clap]
+version  = "4.5.4"
+features = [
+    "derive",
+]
 
 [dependencies.pingora]
 # NOTE: For now we are tracking the git repo. We'll need
