@@ -1,0 +1,7 @@
+# Example configuration file
+#
+# All fields are optional, fields are shown with their
+# default values.
+
+# Threads per service
+threads-per-service = 8
