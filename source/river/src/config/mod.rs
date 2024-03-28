@@ -21,8 +21,6 @@ pub fn render_config() -> internal::Config {
         "CLI config"
     );
 
-    tracing::info!("Applying CLI options");
-
     let toml_opts = if let Some(toml_path) = c.config_toml.as_ref() {
         Some(Toml::from_path(toml_path))
     } else {
@@ -31,11 +29,11 @@ pub fn render_config() -> internal::Config {
     };
 
     // 2.6.7: River MUST give the following priority to configuration:
-    //     Command Line Options (highest priority)
-    //     Environment Variable Options
-    //     Configuration File Options (lowest priority)
+    //   1. Command Line Options (highest priority)
+    //   2. Environment Variable Options
+    //   3. Configuration File Options (lowest priority)
     //
-    // Apply in reverse order
+    // Apply in reverse order as we are layering.
     if let Some(tf) = toml_opts {
         tracing::info!("Applying TOML options");
         apply_toml(&mut config, &tf);
