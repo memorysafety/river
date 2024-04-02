@@ -60,10 +60,9 @@ fn apply_cli(conf: &mut internal::Config, cli: &Cli) {
 
 fn apply_toml(conf: &mut internal::Config, toml: &Toml) {
     let Toml {
-        threads_per_service,
+        system,
+        basic_proxy: _, // TODO
     } = toml;
 
-    if let Some(tps) = threads_per_service {
-        conf.threads_per_service = *tps;
-    }
+    conf.threads_per_service = system.threads_per_service;
 }

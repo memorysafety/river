@@ -1,13 +1,16 @@
 //! Configuration sourced from a TOML file
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub struct Toml {
-    pub threads_per_service: Option<usize>,
+    #[serde(default)]
+    pub system: System,
+    #[serde(default = "Vec::new")]
+    pub basic_proxy: Vec<ProxyConfig>,
 }
 
 impl Toml {
@@ -24,19 +27,72 @@ impl Toml {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub struct System {
+    #[serde(default = "System::default_threads_per_service")]
+    pub threads_per_service: usize,
+}
+
+impl Default for System {
+    fn default() -> Self {
+        System { threads_per_service: Self::default_threads_per_service() }
+    }
+}
+
+impl System {
+    fn default_threads_per_service() -> usize {
+        8
+    }
+}
+
+
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+pub struct TlsConfig {
+    cert_path: PathBuf,
+    key_path: PathBuf,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+pub struct ListenerConfig {
+    source: ListenerKind,
+    tls: Option<TlsConfig>,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+pub enum ListenerKind {
+    Tcp(String),
+    Uds(PathBuf),
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+pub struct ProxyConfig {
+    name: String,
+    listeners: Vec<ListenerKind>,
+}
+
+
 #[cfg(test)]
 pub mod test {
-    use crate::config::{apply_toml, internal};
+    use crate::config::{apply_toml, internal, toml::{ProxyConfig, System}};
 
     use super::Toml;
 
     #[test]
     fn load_example() {
-        const SNAPSHOT: Toml = Toml {
-            threads_per_service: Some(8),
+        let snapshot: Toml = Toml {
+            system: System {
+                threads_per_service: 8,
+            },
+            basic_proxy: vec![
+                ProxyConfig {
+                    name: "Example".into(),
+                    listeners: vec![],
+                }
+            ],
         };
         let loaded = Toml::from_path("./assets/example-config.toml");
-        assert_eq!(SNAPSHOT, loaded);
+        assert_eq!(snapshot, loaded);
 
         let def = internal::Config::default();
         let mut cfg = internal::Config::default();
@@ -45,3 +101,4 @@ pub mod test {
         assert_eq!(def, cfg);
     }
 }
+

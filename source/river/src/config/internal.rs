@@ -15,6 +15,7 @@ pub struct Config {
     pub threads_per_service: usize,
 }
 
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -57,3 +58,4 @@ impl Config {
         // TODO: validation logic
     }
 }
+

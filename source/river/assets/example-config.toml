@@ -3,5 +3,10 @@
 # All fields are optional, fields are shown with their
 # default values.
 
+[system]
 # Threads per service
 threads-per-service = 8
+
+[[basic-proxy]]
+name = "Example"
+listeners = []
