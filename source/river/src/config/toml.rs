@@ -16,7 +16,7 @@ pub struct Toml {
 impl Toml {
     pub fn from_path<P>(path: &P) -> Self
     where
-        P: AsRef<Path> + core::fmt::Debug + ?Sized
+        P: AsRef<Path> + core::fmt::Debug + ?Sized,
     {
         tracing::info!("Loading TOML from {path:?}");
         let f = std::fs::read_to_string(path)
@@ -27,6 +27,11 @@ impl Toml {
     }
 }
 
+//
+// System Config
+//
+
+/// System level configuration options
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub struct System {
@@ -36,7 +41,9 @@ pub struct System {
 
 impl Default for System {
     fn default() -> Self {
-        System { threads_per_service: Self::default_threads_per_service() }
+        System {
+            threads_per_service: Self::default_threads_per_service(),
+        }
     }
 }
 
@@ -46,6 +53,16 @@ impl System {
     }
 }
 
+//
+// Basic Proxy Configuration
+//
+
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+pub struct ProxyConfig {
+    name: String,
+    #[serde(default = "Vec::new")]
+    listeners: Vec<ListenerConfig>,
+}
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct TlsConfig {
@@ -60,21 +77,20 @@ pub struct ListenerConfig {
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[serde(tag = "kind", content = "value")]
 pub enum ListenerKind {
     Tcp(String),
     Uds(PathBuf),
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
-pub struct ProxyConfig {
-    name: String,
-    listeners: Vec<ListenerKind>,
-}
 
 
 #[cfg(test)]
 pub mod test {
-    use crate::config::{apply_toml, internal, toml::{ProxyConfig, System}};
+    use crate::config::{
+        apply_toml, internal,
+        toml::{ListenerConfig, ProxyConfig, System},
+    };
 
     use super::Toml;
 
@@ -84,12 +100,7 @@ pub mod test {
             system: System {
                 threads_per_service: 8,
             },
-            basic_proxy: vec![
-                ProxyConfig {
-                    name: "Example".into(),
-                    listeners: vec![],
-                }
-            ],
+            basic_proxy: vec![],
         };
         let loaded = Toml::from_path("./assets/example-config.toml");
         assert_eq!(snapshot, loaded);
@@ -100,5 +111,43 @@ pub mod test {
 
         assert_eq!(def, cfg);
     }
-}
 
+    #[test]
+    fn load_test() {
+        let snapshot: Toml = Toml {
+            system: System {
+                threads_per_service: 8,
+            },
+            basic_proxy: vec![
+                ProxyConfig {
+                    name: "Example1".into(),
+                    listeners: vec![
+                        ListenerConfig {
+                            source: crate::config::toml::ListenerKind::Tcp("0.0.0.0:80".into()),
+                            tls: None,
+                        },
+                        ListenerConfig {
+                            source: crate::config::toml::ListenerKind::Tcp("0.0.0.0:443".into()),
+                            tls: Some(crate::config::toml::TlsConfig {
+                                cert_path: "./test.crt".into(),
+                                key_path: "./test.pem".into(),
+                            }),
+                        },
+                    ],
+                },
+                ProxyConfig {
+                    name: "Example2".into(),
+                    listeners: vec![],
+                },
+            ],
+        };
+        let loaded = Toml::from_path("./assets/test-config.toml");
+        assert_eq!(snapshot, loaded);
+
+        let def = internal::Config::default();
+        let mut cfg = internal::Config::default();
+        apply_toml(&mut cfg, &loaded);
+
+        assert_eq!(def, cfg);
+    }
+}

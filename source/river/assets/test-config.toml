@@ -1,0 +1,20 @@
+# Test configuration file
+#
+# This is more in depth than the example
+
+[system]
+# Threads per service
+threads-per-service = 8
+
+[[basic-proxy]]
+name = "Example1"
+
+    [[basic-proxy.listeners]]
+    source = { kind = "Tcp", value = "0.0.0.0:80" }
+
+    [[basic-proxy.listeners]]
+    source = { kind = "Tcp", value = "0.0.0.0:443" }
+    tls = { cert_path = "./test.crt", key_path = "./test.pem" }
+
+[[basic-proxy]]
+name = "Example2"

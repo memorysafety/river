@@ -6,7 +6,3 @@
 [system]
 # Threads per service
 threads-per-service = 8
-
-[[basic-proxy]]
-name = "Example"
-listeners = []
