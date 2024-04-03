@@ -61,3 +61,11 @@ features = [
 # NOTE: currently tracking https://github.com/cloudflare/pingora/pull/165
 git = "https://github.com/memorysafety/pingora"
 rev = "d8fb7dbe7558f32376b167e809932601c3bae40f"
+
+[dependencies.pingora-core]
+git = "https://github.com/memorysafety/pingora"
+rev = "d8fb7dbe7558f32376b167e809932601c3bae40f"
+
+[dependencies.pingora-proxy]
+git = "https://github.com/memorysafety/pingora"
+rev = "d8fb7dbe7558f32376b167e809932601c3bae40f"

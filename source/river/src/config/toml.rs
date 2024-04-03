@@ -57,33 +57,33 @@ impl System {
 // Basic Proxy Configuration
 //
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct ProxyConfig {
-    name: String,
+    pub name: String,
     #[serde(default = "Vec::new")]
-    listeners: Vec<ListenerConfig>,
+    pub listeners: Vec<ListenerConfig>,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct TlsConfig {
-    cert_path: PathBuf,
-    key_path: PathBuf,
+    pub cert_path: PathBuf,
+    pub key_path: PathBuf,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct ListenerConfig {
-    source: ListenerKind,
-    tls: Option<TlsConfig>,
+    pub source: ListenerKind,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 #[serde(tag = "kind", content = "value")]
 pub enum ListenerKind {
-    Tcp(String),
+    Tcp {
+        addr: String,
+        tls: Option<TlsConfig>,
+    },
     Uds(PathBuf),
 }
-
-
 
 #[cfg(test)]
 pub mod test {
@@ -114,7 +114,7 @@ pub mod test {
 
     #[test]
     fn load_test() {
-        let snapshot: Toml = Toml {
+        let toml_snapshot: Toml = Toml {
             system: System {
                 threads_per_service: 8,
             },
@@ -123,15 +123,19 @@ pub mod test {
                     name: "Example1".into(),
                     listeners: vec![
                         ListenerConfig {
-                            source: crate::config::toml::ListenerKind::Tcp("0.0.0.0:80".into()),
-                            tls: None,
+                            source: crate::config::toml::ListenerKind::Tcp {
+                                addr: "0.0.0.0:80".into(),
+                                tls: None,
+                            },
                         },
                         ListenerConfig {
-                            source: crate::config::toml::ListenerKind::Tcp("0.0.0.0:443".into()),
-                            tls: Some(crate::config::toml::TlsConfig {
-                                cert_path: "./test.crt".into(),
-                                key_path: "./test.pem".into(),
-                            }),
+                            source: crate::config::toml::ListenerKind::Tcp {
+                                addr: "0.0.0.0:443".into(),
+                                tls: Some(crate::config::toml::TlsConfig {
+                                    cert_path: "./assets/test.crt".into(),
+                                    key_path: "./assets/test.key".into(),
+                                }),
+                            }
                         },
                     ],
                 },
@@ -142,12 +146,42 @@ pub mod test {
             ],
         };
         let loaded = Toml::from_path("./assets/test-config.toml");
-        assert_eq!(snapshot, loaded);
+        assert_eq!(toml_snapshot, loaded);
 
-        let def = internal::Config::default();
+        let sys_snapshot = internal::Config {
+            validate_configs: false,
+            threads_per_service: 8,
+            basic_proxies: vec![
+                internal::ProxyConfig {
+                    name: "Example1".into(),
+                    listeners: vec![
+                        internal::ListenerConfig {
+                            source: internal::ListenerKind::Tcp {
+                                addr: "0.0.0.0:80".into(),
+                                tls: None,
+                            }
+                        },
+                        internal::ListenerConfig {
+                            source: internal::ListenerKind::Tcp {
+                                addr: "0.0.0.0:443".into(),
+                                tls: Some(internal::TlsConfig {
+                                    cert_path: "./assets/test.crt".into(),
+                                    key_path: "./assets/test.key".into(),
+                                }),
+                            }
+                        },
+                    ],
+                },
+                internal::ProxyConfig {
+                    name: "Example2".into(),
+                    listeners: vec![],
+                },
+            ],
+        };
+
         let mut cfg = internal::Config::default();
         apply_toml(&mut cfg, &loaded);
 
-        assert_eq!(def, cfg);
+        assert_eq!(sys_snapshot, cfg);
     }
 }
