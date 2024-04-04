@@ -175,7 +175,12 @@ pub mod test {
                 },
                 ProxyConfig {
                     name: "Example2".into(),
-                    listeners: vec![],
+                    listeners: vec![ListenerConfig {
+                        source: crate::config::toml::ListenerKind::Tcp {
+                            addr: "0.0.0.0:8000".into(),
+                            tls: None,
+                        },
+                    }],
                     connector: ConnectorConfig {
                         proxy_addr: "1.1.1.1:80".into(),
                         tls_sni: None,
@@ -217,7 +222,12 @@ pub mod test {
                 },
                 internal::ProxyConfig {
                     name: "Example2".into(),
-                    listeners: vec![],
+                    listeners: vec![internal::ListenerConfig {
+                        source: internal::ListenerKind::Tcp {
+                            addr: "0.0.0.0:8000".into(),
+                            tls: None,
+                        },
+                    }],
                     upstream: BasicPeer::new("1.1.1.1:80"),
                 },
             ],
