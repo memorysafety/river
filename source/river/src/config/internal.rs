@@ -8,7 +8,7 @@
 
 use std::path::PathBuf;
 
-use pingora::server::configuration::{Opt as PingoraOpt, ServerConf as PingoraServerConf};
+use pingora::{server::configuration::{Opt as PingoraOpt, ServerConf as PingoraServerConf}, upstreams::peer::BasicPeer};
 
 /// River's internal configuration
 #[derive(Debug, PartialEq)]
@@ -66,10 +66,25 @@ impl Config {
 // Basic Proxy Configuration
 //
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone)]
 pub struct ProxyConfig {
     pub(crate) name: String,
     pub(crate) listeners: Vec<ListenerConfig>,
+    pub(crate) upstream: BasicPeer,
+}
+
+impl PartialEq for ProxyConfig {
+    fn eq(&self, other: &Self) -> bool {
+        let mut out = true;
+        let Self { name, listeners, upstream } = self;
+        out &= name.eq(&other.name);
+        out &= listeners.eq(&other.listeners);
+
+        // TODO THIS IS A HACK
+        out &= format!("{:?}", upstream).eq(&format!("{:?}", other.upstream));
+
+        out
+    }
 }
 
 impl From<super::toml::ProxyConfig> for ProxyConfig {
@@ -77,6 +92,7 @@ impl From<super::toml::ProxyConfig> for ProxyConfig {
         Self {
             name: other.name,
             listeners: other.listeners.into_iter().map(Into::into).collect(),
+            upstream: other.connector.into(),
         }
     }
 }
@@ -87,8 +103,8 @@ pub struct TlsConfig {
     pub(crate) key_path: PathBuf,
 }
 
-impl From<super::toml::TlsConfig> for TlsConfig {
-    fn from(other: super::toml::TlsConfig) -> Self {
+impl From<super::toml::ListenerTlsConfig> for TlsConfig {
+    fn from(other: super::toml::ListenerTlsConfig) -> Self {
         Self {
             cert_path: other.cert_path,
             key_path: other.key_path,

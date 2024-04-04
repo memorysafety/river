@@ -29,6 +29,9 @@ all-features = true
 rustdoc-args = ["--cfg", "doc_cfg"]
 
 [dependencies]
+async-trait = "0.1.79"
+log = "0.4.21"
+tokio = "1.37.0" # TODO: check for implicit feature usage
 toml = "0.8.12"
 tracing = "0.1.40"
 

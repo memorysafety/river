@@ -13,17 +13,24 @@ name = "Example1"
         [basic-proxy.listeners.source]
         kind = "Tcp"
             [basic-proxy.listeners.source.value]
-            addr = "0.0.0.0:80"
+            addr = "0.0.0.0:8080"
 
     [[basic-proxy.listeners]]
         [basic-proxy.listeners.source]
         kind = "Tcp"
         [basic-proxy.listeners.source.value]
-            addr = "0.0.0.0:443"
+            addr = "0.0.0.0:4443"
             [basic-proxy.listeners.source.value.tls]
                 cert_path = "./assets/test.crt"
                 key_path = "./assets/test.key"
 
+    [basic-proxy.connector]
+    proxy_addr = "104.16.132.229:443"
+    tls_sni = "cloudflare.com"
+
 
 [[basic-proxy]]
 name = "Example2"
+
+    [basic-proxy.connector]
+    proxy_addr = "104.16.132.229:80"

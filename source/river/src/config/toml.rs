@@ -2,6 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
+use pingora::upstreams::peer::BasicPeer;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
@@ -62,10 +63,34 @@ pub struct ProxyConfig {
     pub name: String,
     #[serde(default = "Vec::new")]
     pub listeners: Vec<ListenerConfig>,
+    pub connector: ConnectorConfig,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-pub struct TlsConfig {
+pub struct ConnectorConfig {
+    pub proxy_addr: String,
+    pub tls_sni: Option<String>,
+}
+
+impl From<ConnectorConfig> for BasicPeer {
+    fn from(val: ConnectorConfig) -> Self {
+        let mut beep = BasicPeer::new(&val.proxy_addr);
+        if let Some(sni) = val.tls_sni {
+            beep.sni = sni;
+        }
+        beep
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct ConnectorTlsConfig {
+    pub proxy_sni: String,
+    pub cert_path: PathBuf,
+    pub key_path: PathBuf,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct ListenerTlsConfig {
     pub cert_path: PathBuf,
     pub key_path: PathBuf,
 }
@@ -80,16 +105,18 @@ pub struct ListenerConfig {
 pub enum ListenerKind {
     Tcp {
         addr: String,
-        tls: Option<TlsConfig>,
+        tls: Option<ListenerTlsConfig>,
     },
     Uds(PathBuf),
 }
 
 #[cfg(test)]
 pub mod test {
+    use pingora::upstreams::peer::BasicPeer;
+
     use crate::config::{
         apply_toml, internal,
-        toml::{ListenerConfig, ProxyConfig, System},
+        toml::{ConnectorConfig, ListenerConfig, ProxyConfig, System},
     };
 
     use super::Toml;
@@ -124,24 +151,32 @@ pub mod test {
                     listeners: vec![
                         ListenerConfig {
                             source: crate::config::toml::ListenerKind::Tcp {
-                                addr: "0.0.0.0:80".into(),
+                                addr: "0.0.0.0:8080".into(),
                                 tls: None,
                             },
                         },
                         ListenerConfig {
                             source: crate::config::toml::ListenerKind::Tcp {
-                                addr: "0.0.0.0:443".into(),
-                                tls: Some(crate::config::toml::TlsConfig {
+                                addr: "0.0.0.0:4443".into(),
+                                tls: Some(crate::config::toml::ListenerTlsConfig {
                                     cert_path: "./assets/test.crt".into(),
                                     key_path: "./assets/test.key".into(),
                                 }),
-                            }
+                            },
                         },
                     ],
+                    connector: ConnectorConfig {
+                        proxy_addr: "104.16.132.229:443".into(),
+                        tls_sni: Some(String::from("cloudflare.com")),
+                    },
                 },
                 ProxyConfig {
                     name: "Example2".into(),
                     listeners: vec![],
+                    connector: ConnectorConfig {
+                        proxy_addr: "104.16.132.229:80".into(),
+                        tls_sni: None,
+                    },
                 },
             ],
         };
@@ -157,24 +192,30 @@ pub mod test {
                     listeners: vec![
                         internal::ListenerConfig {
                             source: internal::ListenerKind::Tcp {
-                                addr: "0.0.0.0:80".into(),
+                                addr: "0.0.0.0:8080".into(),
                                 tls: None,
-                            }
+                            },
                         },
                         internal::ListenerConfig {
                             source: internal::ListenerKind::Tcp {
-                                addr: "0.0.0.0:443".into(),
+                                addr: "0.0.0.0:4443".into(),
                                 tls: Some(internal::TlsConfig {
                                     cert_path: "./assets/test.crt".into(),
                                     key_path: "./assets/test.key".into(),
                                 }),
-                            }
+                            },
                         },
                     ],
+                    upstream: {
+                        let mut beep = BasicPeer::new("104.16.132.229:443");
+                        beep.sni = String::from("cloudflare.com");
+                        beep
+                    },
                 },
                 internal::ProxyConfig {
                     name: "Example2".into(),
                     listeners: vec![],
+                    upstream: BasicPeer::new("104.16.132.229:80"),
                 },
             ],
         };
