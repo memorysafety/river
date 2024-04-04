@@ -14,7 +14,7 @@ use pingora::{
 };
 
 /// River's internal configuration
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Config {
     pub validate_configs: bool,
     pub threads_per_service: usize,
@@ -74,24 +74,6 @@ pub struct ProxyConfig {
     pub(crate) name: String,
     pub(crate) listeners: Vec<ListenerConfig>,
     pub(crate) upstream: BasicPeer,
-}
-
-impl PartialEq for ProxyConfig {
-    fn eq(&self, other: &Self) -> bool {
-        let mut out = true;
-        let Self {
-            name,
-            listeners,
-            upstream,
-        } = self;
-        out &= name.eq(&other.name);
-        out &= listeners.eq(&other.listeners);
-
-        // TODO THIS IS A HACK
-        out &= format!("{:?}", upstream).eq(&format!("{:?}", other.upstream));
-
-        out
-    }
 }
 
 impl From<super::toml::ProxyConfig> for ProxyConfig {

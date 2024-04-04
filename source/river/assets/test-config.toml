@@ -25,12 +25,12 @@ name = "Example1"
                 key_path = "./assets/test.key"
 
     [basic-proxy.connector]
-    proxy_addr = "104.16.132.229:443"
-    tls_sni = "cloudflare.com"
+    proxy_addr = "1.1.1.1:443"
+    tls_sni = "one.one.one.one"
 
 
 [[basic-proxy]]
 name = "Example2"
 
     [basic-proxy.connector]
-    proxy_addr = "104.16.132.229:80"
+    proxy_addr = "1.1.1.1:80"

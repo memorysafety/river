@@ -136,7 +136,10 @@ pub mod test {
         let mut cfg = internal::Config::default();
         apply_toml(&mut cfg, &loaded);
 
-        assert_eq!(def, cfg);
+        // These don't impl PartialEq, largely due to `BasicPeer` and `Tracer` not
+        // implementing the trait. Since we only need this for testing, this is...
+        // sort of acceptable
+        assert_eq!(format!("{def:?}"), format!("{cfg:?}"));
     }
 
     #[test]
@@ -166,15 +169,15 @@ pub mod test {
                         },
                     ],
                     connector: ConnectorConfig {
-                        proxy_addr: "104.16.132.229:443".into(),
-                        tls_sni: Some(String::from("cloudflare.com")),
+                        proxy_addr: "1.1.1.1:443".into(),
+                        tls_sni: Some(String::from("one.one.one.one")),
                     },
                 },
                 ProxyConfig {
                     name: "Example2".into(),
                     listeners: vec![],
                     connector: ConnectorConfig {
-                        proxy_addr: "104.16.132.229:80".into(),
+                        proxy_addr: "1.1.1.1:80".into(),
                         tls_sni: None,
                     },
                 },
@@ -207,15 +210,15 @@ pub mod test {
                         },
                     ],
                     upstream: {
-                        let mut beep = BasicPeer::new("104.16.132.229:443");
-                        beep.sni = String::from("cloudflare.com");
+                        let mut beep = BasicPeer::new("1.1.1.1:443");
+                        beep.sni = String::from("one.one.one.one");
                         beep
                     },
                 },
                 internal::ProxyConfig {
                     name: "Example2".into(),
                     listeners: vec![],
-                    upstream: BasicPeer::new("104.16.132.229:80"),
+                    upstream: BasicPeer::new("1.1.1.1:80"),
                 },
             ],
         };
@@ -223,6 +226,9 @@ pub mod test {
         let mut cfg = internal::Config::default();
         apply_toml(&mut cfg, &loaded);
 
-        assert_eq!(sys_snapshot, cfg);
+        // These don't impl PartialEq, largely due to `BasicPeer` and `Tracer` not
+        // implementing the trait. Since we only need this for testing, this is...
+        // sort of acceptable
+        assert_eq!(format!("{sys_snapshot:?}"), format!("{cfg:?}"));
     }
 }
