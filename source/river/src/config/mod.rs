@@ -60,10 +60,21 @@ fn apply_cli(conf: &mut internal::Config, cli: &Cli) {
 
 fn apply_toml(conf: &mut internal::Config, toml: &Toml) {
     let Toml {
-        threads_per_service,
+        system,
+        basic_proxy,
     } = toml;
 
-    if let Some(tps) = threads_per_service {
-        conf.threads_per_service = *tps;
-    }
+    let basic_proxy: Vec<internal::ProxyConfig> =
+        basic_proxy.iter().cloned().map(Into::into).collect();
+
+    // As toml is a configuration file, it should SET the value. We have to later consider
+    // if we EXTEND or REPLACE when used with more config file formats, or allow for setting
+    // of proxies in env/cli options.
+    assert!(
+        conf.basic_proxies.is_empty(),
+        "Non-empty 'basic proxies' list when applying TOML settings. This is unexpected."
+    );
+    conf.basic_proxies = basic_proxy;
+
+    conf.threads_per_service = system.threads_per_service;
 }

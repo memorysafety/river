@@ -6,13 +6,19 @@
 //! This is used as the buffer between any external stable UI, and internal
 //! impl details which may change at any time.
 
-use pingora::server::configuration::{Opt as PingoraOpt, ServerConf as PingoraServerConf};
+use std::path::PathBuf;
+
+use pingora::{
+    server::configuration::{Opt as PingoraOpt, ServerConf as PingoraServerConf},
+    upstreams::peer::BasicPeer,
+};
 
 /// River's internal configuration
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Config {
     pub validate_configs: bool,
     pub threads_per_service: usize,
+    pub basic_proxies: Vec<ProxyConfig>,
 }
 
 impl Default for Config {
@@ -20,6 +26,7 @@ impl Default for Config {
         Self {
             validate_configs: false,
             threads_per_service: 8,
+            basic_proxies: vec![],
         }
     }
 }
@@ -55,5 +62,75 @@ impl Config {
 
     pub fn validate(&self) {
         // TODO: validation logic
+    }
+}
+
+//
+// Basic Proxy Configuration
+//
+
+#[derive(Debug, Clone)]
+pub struct ProxyConfig {
+    pub(crate) name: String,
+    pub(crate) listeners: Vec<ListenerConfig>,
+    pub(crate) upstream: BasicPeer,
+}
+
+impl From<super::toml::ProxyConfig> for ProxyConfig {
+    fn from(other: super::toml::ProxyConfig) -> Self {
+        Self {
+            name: other.name,
+            listeners: other.listeners.into_iter().map(Into::into).collect(),
+            upstream: other.connector.into(),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct TlsConfig {
+    pub(crate) cert_path: PathBuf,
+    pub(crate) key_path: PathBuf,
+}
+
+impl From<super::toml::ListenerTlsConfig> for TlsConfig {
+    fn from(other: super::toml::ListenerTlsConfig) -> Self {
+        Self {
+            cert_path: other.cert_path,
+            key_path: other.key_path,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct ListenerConfig {
+    pub(crate) source: ListenerKind,
+}
+
+impl From<super::toml::ListenerConfig> for ListenerConfig {
+    fn from(other: super::toml::ListenerConfig) -> Self {
+        Self {
+            source: other.source.into(),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum ListenerKind {
+    Tcp {
+        addr: String,
+        tls: Option<TlsConfig>,
+    },
+    Uds(PathBuf),
+}
+
+impl From<super::toml::ListenerKind> for ListenerKind {
+    fn from(other: super::toml::ListenerKind) -> Self {
+        match other {
+            super::toml::ListenerKind::Tcp { addr, tls } => ListenerKind::Tcp {
+                addr,
+                tls: tls.map(Into::into),
+            },
+            super::toml::ListenerKind::Uds(a) => ListenerKind::Uds(a),
+        }
     }
 }

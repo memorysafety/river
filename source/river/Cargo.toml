@@ -29,6 +29,9 @@ all-features = true
 rustdoc-args = ["--cfg", "doc_cfg"]
 
 [dependencies]
+async-trait = "0.1.79"
+log = "0.4.21"
+tokio = "1.37.0" # TODO: check for implicit feature usage
 toml = "0.8.12"
 tracing = "0.1.40"
 
@@ -59,5 +62,13 @@ features = [
 # git = "https://github.com/cloudflare/pingora"
 #
 # NOTE: currently tracking https://github.com/cloudflare/pingora/pull/165
+git = "https://github.com/memorysafety/pingora"
+rev = "d8fb7dbe7558f32376b167e809932601c3bae40f"
+
+[dependencies.pingora-core]
+git = "https://github.com/memorysafety/pingora"
+rev = "d8fb7dbe7558f32376b167e809932601c3bae40f"
+
+[dependencies.pingora-proxy]
 git = "https://github.com/memorysafety/pingora"
 rev = "d8fb7dbe7558f32376b167e809932601c3bae40f"

@@ -2,6 +2,11 @@
 #
 # All fields are optional, fields are shown with their
 # default values.
+#
+# NOTE: Until we have made a release, configuration format should
+# be considered entirely unstable, and likely to make breaking changes
+# commit-to-commit!
 
+[system]
 # Threads per service
 threads-per-service = 8

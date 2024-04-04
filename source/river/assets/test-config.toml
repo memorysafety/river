@@ -1,0 +1,64 @@
+# Test configuration file
+#
+# This is more in depth than the example.
+#
+# NOTE: Until we have made a release, configuration format should
+# be considered entirely unstable, and likely to make breaking changes
+# commit-to-commit!
+
+[system]
+# Threads per service
+threads-per-service = 8
+
+# Specify a Basic Proxy service, which features minimal configuration.
+#
+# Note that indentation isn't significant in TOML, it is only done
+# here to note the structure of the data.
+#
+# TODO: This data is very structured, and TOML might not be a good fit.
+[[basic-proxy]]
+name = "Example1"
+
+    # Each `basic-proxy` can have one or more Listeners, or downstream
+    # connections. If you provide zero, the basic proxy will terminate
+    # immediately.
+    [[basic-proxy.listeners]]
+        # TODO: "listeners" only has one field, we might want to use
+        # serde flatten
+        [basic-proxy.listeners.source]
+        # Listeners can have kind of "Tcp" (w/ or w/o TLS) or "Uds"
+        # for "Unix Domain Sockets", which cannot have TLS.
+        kind = "Tcp"
+            [basic-proxy.listeners.source.value]
+            # TCP must specify the address, which includes the port to bind to
+            addr = "0.0.0.0:8080"
+
+    # `basic-proxy`s can have multiple listeners
+    [[basic-proxy.listeners]]
+
+        [basic-proxy.listeners.source]
+        kind = "Tcp"
+
+        [basic-proxy.listeners.source.value]
+        addr = "0.0.0.0:4443"
+
+            # To enable TLS, specify the path to the certificate and key
+            [basic-proxy.listeners.source.value.tls]
+            cert_path = "./assets/test.crt"
+            key_path = "./assets/test.key"
+
+    # Each `basic proxy` must have exactly one "connector", or the upstream
+    # server they will proxy to.
+    #
+    # To use TLS for upstream connections, specify the SNI of the connection
+    [basic-proxy.connector]
+    proxy_addr = "1.1.1.1:443"
+    tls_sni = "one.one.one.one"
+
+# We specify a second basic proxy as well. Here we use the other table syntax
+[[basic-proxy]]
+name = "Example2"
+listeners = [
+    { source = { kind = "Tcp", value = { addr = "0.0.0.0:8000" } } }
+]
+connector = { proxy_addr = "1.1.1.1:80" }
