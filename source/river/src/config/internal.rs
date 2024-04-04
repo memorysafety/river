@@ -8,7 +8,10 @@
 
 use std::path::PathBuf;
 
-use pingora::{server::configuration::{Opt as PingoraOpt, ServerConf as PingoraServerConf}, upstreams::peer::BasicPeer};
+use pingora::{
+    server::configuration::{Opt as PingoraOpt, ServerConf as PingoraServerConf},
+    upstreams::peer::BasicPeer,
+};
 
 /// River's internal configuration
 #[derive(Debug, PartialEq)]
@@ -76,7 +79,11 @@ pub struct ProxyConfig {
 impl PartialEq for ProxyConfig {
     fn eq(&self, other: &Self) -> bool {
         let mut out = true;
-        let Self { name, listeners, upstream } = self;
+        let Self {
+            name,
+            listeners,
+            upstream,
+        } = self;
         out &= name.eq(&other.name);
         out &= listeners.eq(&other.listeners);
 
@@ -137,7 +144,10 @@ pub enum ListenerKind {
 impl From<super::toml::ListenerKind> for ListenerKind {
     fn from(other: super::toml::ListenerKind) -> Self {
         match other {
-            super::toml::ListenerKind::Tcp { addr, tls } => ListenerKind::Tcp { addr, tls: tls.map(Into::into) },
+            super::toml::ListenerKind::Tcp { addr, tls } => ListenerKind::Tcp {
+                addr,
+                tls: tls.map(Into::into),
+            },
             super::toml::ListenerKind::Uds(a) => ListenerKind::Uds(a),
         }
     }

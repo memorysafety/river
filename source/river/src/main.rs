@@ -1,7 +1,6 @@
 mod config;
 mod proxy;
 
-
 use std::sync::Arc;
 
 use pingora::{listeners::Listeners, server::Server, services::Service};
@@ -34,23 +33,30 @@ fn main() {
             // See also https://github.com/cloudflare/pingora/issues/183 for tracking "ip addrs shouldn't
             // be strings"
             match list_cfg.source {
-                ListenerKind::Tcp { addr, tls: Some(tls_cfg) } => {
-                    let cert_path = tls_cfg.cert_path.to_str().expect("cert path should be utf8");
+                ListenerKind::Tcp {
+                    addr,
+                    tls: Some(tls_cfg),
+                } => {
+                    let cert_path = tls_cfg
+                        .cert_path
+                        .to_str()
+                        .expect("cert path should be utf8");
                     let key_path = tls_cfg.key_path.to_str().expect("key path should be utf8");
-                    listeners.add_tls(&addr, cert_path, key_path).expect("adding TLS listener shouldn't fail");
-                },
+                    listeners
+                        .add_tls(&addr, cert_path, key_path)
+                        .expect("adding TLS listener shouldn't fail");
+                }
                 ListenerKind::Tcp { addr, tls: None } => {
                     listeners.add_tcp(&addr);
-                },
+                }
                 ListenerKind::Uds(path) => {
                     let path = path.to_str().unwrap();
                     listeners.add_uds(path, None); // todo
-                },
+                }
             }
         }
 
         let upstream = ProxyApp::new(beep.upstream);
-
 
         let svc = pingora_core::services::listening::Service::with_listeners(
             beep.name,
