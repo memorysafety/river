@@ -62,6 +62,7 @@ impl Config {
 #[derive(Debug, Clone)]
 pub struct PathControl {
     pub(crate) upstream_request_filters: Vec<BTreeMap<String, String>>,
+    pub(crate) upstream_response_filters: Vec<BTreeMap<String, String>>,
 }
 
 //
@@ -125,6 +126,7 @@ impl From<super::toml::PathControl> for PathControl {
     fn from(value: super::toml::PathControl) -> Self {
         Self {
             upstream_request_filters: value.upstream_request_filters,
+            upstream_response_filters: value.upstream_response_filters,
         }
     }
 }

@@ -1,24 +1,22 @@
 use std::collections::BTreeMap;
 
-use async_trait::async_trait;
 use pingora_core::{Error, Result};
-use pingora_http::RequestHeader;
+use pingora_http::ResponseHeader;
 use pingora_proxy::Session;
 use regex::Regex;
 
 use super::{ensure_empty, extract_val, RiverContext};
 
 /// This is a single-serving trait for modifiers that provide actions for
-/// [ProxyHttp::upstream_request_filter] methods
-#[async_trait]
-pub trait RequestModifyMod: Send + Sync {
-    /// See [ProxyHttp::upstream_request_filter] for more details
-    async fn upstream_request_filter(
+/// [ProxyHttp::upstream_response_filter] methods
+pub trait ResponseModifyMod: Send + Sync {
+    /// See [ProxyHttp::upstream_response_filter] for more details
+    fn upstream_response_filter(
         &self,
         session: &mut Session,
-        header: &mut RequestHeader,
+        header: &mut ResponseHeader,
         ctx: &mut RiverContext,
-    ) -> Result<()>;
+    );
 }
 
 // Remove header by key
@@ -46,14 +44,13 @@ impl RemoveHeaderKeyRegex {
     }
 }
 
-#[async_trait]
-impl RequestModifyMod for RemoveHeaderKeyRegex {
-    async fn upstream_request_filter(
+impl ResponseModifyMod for RemoveHeaderKeyRegex {
+    fn upstream_response_filter(
         &self,
         _session: &mut Session,
-        header: &mut RequestHeader,
+        header: &mut ResponseHeader,
         _ctx: &mut RiverContext,
-    ) -> Result<()> {
+    ) {
         // Find all the headers that have keys that match the regex...
         let headers = header
             .headers
@@ -72,8 +69,6 @@ impl RequestModifyMod for RemoveHeaderKeyRegex {
         for h in headers {
             assert!(header.remove_header(&h).is_some());
         }
-
-        Ok(())
     }
 }
 
@@ -96,19 +91,17 @@ impl UpsertHeader {
     }
 }
 
-#[async_trait]
-impl RequestModifyMod for UpsertHeader {
-    async fn upstream_request_filter(
+impl ResponseModifyMod for UpsertHeader {
+    fn upstream_response_filter(
         &self,
         _session: &mut Session,
-        header: &mut RequestHeader,
+        header: &mut ResponseHeader,
         _ctx: &mut RiverContext,
-    ) -> Result<()> {
+    ) {
         if let Some(h) = header.remove_header(&self.key) {
             tracing::debug!("Removed header: {h:?}");
         }
-        header.append_header(self.key.clone(), &self.value)?;
+        let _ = header.append_header(self.key.clone(), &self.value);
         tracing::debug!("Inserted header: {}: {}", self.key, self.value);
-        Ok(())
     }
 }

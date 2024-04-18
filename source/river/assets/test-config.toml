@@ -69,6 +69,13 @@ name = "Example1"
         { kind = "upsert-header", key = "x-proxy-friend", value = "river" },
     ]
 
+    upstream-response-filters = [
+        # Remove any headers with keys matching `pattern`
+        { kind = "remove-header-key-regex", pattern = ".*ETag.*" },
+        # Add or replace (e.g. "Upsert") a fixed header with the given key and value
+        { kind = "upsert-header", key = "x-with-love-from", value = "river" },
+    ]
+
 # We specify a second basic proxy as well. Here we use the other table syntax
 [[basic-proxy]]
 name = "Example2"

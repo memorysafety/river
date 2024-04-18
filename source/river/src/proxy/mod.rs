@@ -4,19 +4,24 @@
 //! this includes creation of HTTP proxy services, as well as Path Control
 //! modifiers.
 
+use std::collections::BTreeMap;
+
 use async_trait::async_trait;
 
-use pingora::server::Server;
+use pingora::{server::Server, Error};
 use pingora_core::{services::listening::Service, upstreams::peer::HttpPeer, Result};
-use pingora_http::RequestHeader;
+use pingora_http::{RequestHeader, ResponseHeader};
 use pingora_proxy::{HttpProxy, ProxyHttp, Session};
 
 use crate::{
     config::internal::{ListenerKind, PathControl, ProxyConfig},
-    proxy::request_modifiers::{RemoveHeaderKeyRegex, RequestModifyMod, UpsertHeader},
+    proxy::request_modifiers::RequestModifyMod,
 };
 
+use self::response_modifiers::ResponseModifyMod;
+
 pub mod request_modifiers;
+pub mod response_modifiers;
 
 /// The [RiverProxyService] is intended to capture the behaviors used to extend
 /// the [HttpProxy] functionality by providing a [ProxyHttp] trait implementation.
@@ -112,6 +117,7 @@ impl RiverProxyService {
 pub struct Modifiers {
     /// Filters used during the handling of [ProxyHttp::upstream_request_filter]
     pub upstream_request_filters: Vec<Box<dyn RequestModifyMod>>,
+    pub upstream_response_filters: Vec<Box<dyn ResponseModifyMod>>,
 }
 
 impl Modifiers {
@@ -123,17 +129,35 @@ impl Modifiers {
         for mut filter in conf.upstream_request_filters.drain(..) {
             let kind = filter.remove("kind").unwrap();
             let f: Box<dyn RequestModifyMod> = match kind.as_str() {
-                "remove-header-key-regex" => {
-                    Box::new(RemoveHeaderKeyRegex::from_settings(filter).unwrap())
+                "remove-header-key-regex" => Box::new(
+                    request_modifiers::RemoveHeaderKeyRegex::from_settings(filter).unwrap(),
+                ),
+                "upsert-header" => {
+                    Box::new(request_modifiers::UpsertHeader::from_settings(filter).unwrap())
                 }
-                "upsert-header" => Box::new(UpsertHeader::from_settings(filter).unwrap()),
                 _ => panic!(),
             };
             upstream_request_filters.push(f);
         }
 
+        let mut upstream_response_filters: Vec<Box<dyn ResponseModifyMod>> = vec![];
+        for mut filter in conf.upstream_response_filters.drain(..) {
+            let kind = filter.remove("kind").unwrap();
+            let f: Box<dyn ResponseModifyMod> = match kind.as_str() {
+                "remove-header-key-regex" => Box::new(
+                    response_modifiers::RemoveHeaderKeyRegex::from_settings(filter).unwrap(),
+                ),
+                "upsert-header" => {
+                    Box::new(response_modifiers::UpsertHeader::from_settings(filter).unwrap())
+                }
+                _ => panic!(),
+            };
+            upstream_response_filters.push(f);
+        }
+
         Ok(Self {
             upstream_request_filters,
+            upstream_response_filters,
         })
     }
 }
@@ -178,6 +202,47 @@ impl ProxyHttp for RiverProxyService {
         for filter in &self.modifiers.upstream_request_filters {
             filter.upstream_request_filter(session, header, ctx).await?;
         }
+        Ok(())
+    }
+
+    /// Handle the "upstream response filter" phase, where we can choose to make
+    /// modifications to the response, prior to it being passed along downstream
+    ///
+    /// We may want to also support `upstream_response` stage, as that may interact
+    /// with cache differently.
+    fn upstream_response_filter(
+        &self,
+        session: &mut Session,
+        upstream_response: &mut ResponseHeader,
+        ctx: &mut Self::CTX,
+    ) {
+        for filter in &self.modifiers.upstream_response_filters {
+            filter.upstream_response_filter(session, upstream_response, ctx);
+        }
+    }
+}
+
+/// Helper function that extracts the value of a given key.
+///
+/// Returns an error if the key does not exist
+fn extract_val(key: &str, map: &mut BTreeMap<String, String>) -> Result<String> {
+    map.remove(key).ok_or_else(|| {
+        // TODO: better "Error" creation
+        tracing::error!("Missing key: '{key}'");
+        Error::new_str("Missing configuration field!")
+    })
+}
+
+/// Helper function to make sure the map is empty
+///
+/// This is used to reject unknown configuration keys
+fn ensure_empty(map: &BTreeMap<String, String>) -> Result<()> {
+    if !map.is_empty() {
+        let keys = map.keys().map(String::as_str).collect::<Vec<&str>>();
+        let all_keys = keys.join(", ");
+        tracing::error!("Extra keys found: '{all_keys}'");
+        Err(Error::new_str("Extra settings found!"))
+    } else {
         Ok(())
     }
 }

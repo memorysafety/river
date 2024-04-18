@@ -70,6 +70,8 @@ impl System {
 pub struct PathControl {
     #[serde(default = "Vec::new")]
     pub upstream_request_filters: Vec<BTreeMap<String, String>>,
+    #[serde(default = "Vec::new")]
+    pub upstream_response_filters: Vec<BTreeMap<String, String>>,
 }
 
 //
