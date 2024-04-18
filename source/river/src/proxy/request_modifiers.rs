@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use async_trait::async_trait;
 use pingora_core::{Error, Result};
@@ -6,28 +6,36 @@ use pingora_http::RequestHeader;
 use pingora_proxy::Session;
 use regex::Regex;
 
-use super::MyCtx;
+use super::RiverContext;
 
+/// This is a single-serving trait for modifiers that provide actions for
+/// [ProxyHttp::upstream_request_filter] methods
 #[async_trait]
 pub trait RequestModifyMod: Send + Sync {
+    /// See [ProxyHttp::upstream_request_filter] for more details
     async fn upstream_request_filter(
         &self,
         session: &mut Session,
         header: &mut RequestHeader,
-        ctx: &mut MyCtx,
+        ctx: &mut RiverContext,
     ) -> Result<()>;
 }
 
-fn extract_val(key: &str, map: &mut HashMap<String, String>) -> Result<String> {
-    map.remove(key)
-        .ok_or_else(|| {
-            // TODO: better "Error" creation
-            tracing::error!("Missing key: '{key}'");
-            Error::new_str("Missing configuration field!")
-        })
+/// Helper function that extracts the value of a given key.
+///
+/// Returns an error if the key does not exist
+fn extract_val(key: &str, map: &mut BTreeMap<String, String>) -> Result<String> {
+    map.remove(key).ok_or_else(|| {
+        // TODO: better "Error" creation
+        tracing::error!("Missing key: '{key}'");
+        Error::new_str("Missing configuration field!")
+    })
 }
 
-fn ensure_empty(map: &HashMap<String, String>) -> Result<()> {
+/// Helper function to make sure the map is empty
+///
+/// This is used to reject unknown configuration keys
+fn ensure_empty(map: &BTreeMap<String, String>) -> Result<()> {
     if !map.is_empty() {
         let keys = map.keys().map(String::as_str).collect::<Vec<&str>>();
         let all_keys = keys.join(", ");
@@ -42,12 +50,14 @@ fn ensure_empty(map: &HashMap<String, String>) -> Result<()> {
 //
 //
 
+/// Removes a header if the key matches a given regex
 pub struct RemoveHeaderKeyRegex {
     regex: Regex,
 }
 
 impl RemoveHeaderKeyRegex {
-    pub fn from_settings(mut settings: HashMap<String, String>) -> Result<Self> {
+    /// Create from the settings field
+    pub fn from_settings(mut settings: BTreeMap<String, String>) -> Result<Self> {
         let mat = extract_val("pattern", &mut settings)?;
 
         let reg = Regex::new(&mat).map_err(|e| {
@@ -67,7 +77,7 @@ impl RequestModifyMod for RemoveHeaderKeyRegex {
         &self,
         _session: &mut Session,
         header: &mut RequestHeader,
-        _ctx: &mut MyCtx,
+        _ctx: &mut RiverContext,
     ) -> Result<()> {
         // Find all the headers that have keys that match the regex...
         let headers = header
@@ -96,13 +106,15 @@ impl RequestModifyMod for RemoveHeaderKeyRegex {
 //
 //
 
+/// Adds or replaces a given header key and value
 pub struct UpsertHeader {
     key: String,
     value: String,
 }
 
 impl UpsertHeader {
-    pub fn from_settings(mut settings: HashMap<String, String>) -> Result<Self> {
+    /// Create from the settings field
+    pub fn from_settings(mut settings: BTreeMap<String, String>) -> Result<Self> {
         let key = extract_val("key", &mut settings)?;
         let value = extract_val("value", &mut settings)?;
         Ok(Self { key, value })
@@ -115,7 +127,7 @@ impl RequestModifyMod for UpsertHeader {
         &self,
         _session: &mut Session,
         header: &mut RequestHeader,
-        _ctx: &mut MyCtx,
+        _ctx: &mut RiverContext,
     ) -> Result<()> {
         if let Some(h) = header.remove_header(&self.key) {
             tracing::debug!("Removed header: {h:?}");

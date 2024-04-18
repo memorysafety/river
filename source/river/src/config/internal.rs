@@ -6,7 +6,7 @@
 //! This is used as the buffer between any external stable UI, and internal
 //! impl details which may change at any time.
 
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::BTreeMap, path::PathBuf};
 
 use pingora::{
     server::configuration::{Opt as PingoraOpt, ServerConf as PingoraServerConf},
@@ -19,16 +19,6 @@ pub struct Config {
     pub validate_configs: bool,
     pub threads_per_service: usize,
     pub basic_proxies: Vec<ProxyConfig>,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            validate_configs: false,
-            threads_per_service: 8,
-            basic_proxies: vec![],
-        }
-    }
 }
 
 impl Config {
@@ -65,17 +55,13 @@ impl Config {
     }
 }
 
+/// Add Path Control Modifiers
+///
+/// Note that we use `BTreeMap` and NOT `HashMap`, as we want to maintain the
+/// ordering from the configuration file.
 #[derive(Debug, Clone)]
 pub struct PathControl {
-    pub(crate) upstream_request_filters: Vec<HashMap<String, String>>,
-}
-
-impl From<super::toml::PathControl> for PathControl {
-    fn from(value: super::toml::PathControl) -> Self {
-        Self {
-            upstream_request_filters: value.upstream_request_filters,
-        }
-    }
+    pub(crate) upstream_request_filters: Vec<BTreeMap<String, String>>,
 }
 
 //
@@ -90,6 +76,40 @@ pub struct ProxyConfig {
     pub(crate) path_control: PathControl,
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub struct TlsConfig {
+    pub(crate) cert_path: PathBuf,
+    pub(crate) key_path: PathBuf,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct ListenerConfig {
+    pub(crate) source: ListenerKind,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum ListenerKind {
+    Tcp {
+        addr: String,
+        tls: Option<TlsConfig>,
+    },
+    Uds(PathBuf),
+}
+
+//
+// Boilerplate trait impls
+//
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            validate_configs: false,
+            threads_per_service: 8,
+            basic_proxies: vec![],
+        }
+    }
+}
+
 impl From<super::toml::ProxyConfig> for ProxyConfig {
     fn from(other: super::toml::ProxyConfig) -> Self {
         Self {
@@ -101,10 +121,12 @@ impl From<super::toml::ProxyConfig> for ProxyConfig {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
-pub struct TlsConfig {
-    pub(crate) cert_path: PathBuf,
-    pub(crate) key_path: PathBuf,
+impl From<super::toml::PathControl> for PathControl {
+    fn from(value: super::toml::PathControl) -> Self {
+        Self {
+            upstream_request_filters: value.upstream_request_filters,
+        }
+    }
 }
 
 impl From<super::toml::ListenerTlsConfig> for TlsConfig {
@@ -116,26 +138,12 @@ impl From<super::toml::ListenerTlsConfig> for TlsConfig {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
-pub struct ListenerConfig {
-    pub(crate) source: ListenerKind,
-}
-
 impl From<super::toml::ListenerConfig> for ListenerConfig {
     fn from(other: super::toml::ListenerConfig) -> Self {
         Self {
             source: other.source.into(),
         }
     }
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum ListenerKind {
-    Tcp {
-        addr: String,
-        tls: Option<TlsConfig>,
-    },
-    Uds(PathBuf),
 }
 
 impl From<super::toml::ListenerKind> for ListenerKind {

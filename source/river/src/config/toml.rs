@@ -1,18 +1,22 @@
 //! Configuration sourced from a TOML file
 
 use std::{
-    collections::HashMap,
+    collections::BTreeMap,
     path::{Path, PathBuf},
 };
 
 use pingora::upstreams::peer::HttpPeer;
 use serde::{Deserialize, Serialize};
 
+/// Configuration used for TOML formatted files
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub struct Toml {
+    /// System-wide configuration valies
     #[serde(default)]
     pub system: System,
+
+    /// Configuration for each Basic Proxy instance
     #[serde(default = "Vec::new")]
     pub basic_proxy: Vec<ProxyConfig>,
 }
@@ -57,11 +61,15 @@ impl System {
     }
 }
 
+/// Add Path Control Modifiers
+///
+/// Note that we use `BTreeMap` and NOT `HashMap`, as we want to maintain the
+/// ordering from the configuration file.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Default)]
 #[serde(rename_all = "kebab-case")]
 pub struct PathControl {
     #[serde(default = "Vec::new")]
-    pub upstream_request_filters: Vec<HashMap<String, String>>,
+    pub upstream_request_filters: Vec<BTreeMap<String, String>>,
 }
 
 //
@@ -71,17 +79,26 @@ pub struct PathControl {
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct ProxyConfig {
+    /// Name of the Service. Used for logging.
     pub name: String,
+
+    /// Listeners - or "downstream" interfaces we listen to
     #[serde(default = "Vec::new")]
     pub listeners: Vec<ListenerConfig>,
+
+    /// Connector - our (currently single) "upstream" server
     pub connector: ConnectorConfig,
     #[serde(default = "Default::default")]
+
+    /// Path Control, for modifying and filtering requests
     pub path_control: PathControl,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct ConnectorConfig {
+    /// Proxy Address, e.g. `IP:port`
     pub proxy_addr: String,
+    /// TLS SNI, if TLS should be used
     pub tls_sni: Option<String>,
 }
 
