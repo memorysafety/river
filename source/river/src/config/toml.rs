@@ -1,8 +1,11 @@
 //! Configuration sourced from a TOML file
 
-use std::path::{Path, PathBuf};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
-use pingora::upstreams::peer::BasicPeer;
+use pingora::upstreams::peer::HttpPeer;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
@@ -54,16 +57,26 @@ impl System {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Default)]
+#[serde(rename_all = "kebab-case")]
+pub struct PathControl {
+    #[serde(default = "Vec::new")]
+    pub upstream_request_filters: Vec<HashMap<String, String>>,
+}
+
 //
 // Basic Proxy Configuration
 //
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[serde(rename_all = "kebab-case")]
 pub struct ProxyConfig {
     pub name: String,
     #[serde(default = "Vec::new")]
     pub listeners: Vec<ListenerConfig>,
     pub connector: ConnectorConfig,
+    #[serde(default = "Default::default")]
+    pub path_control: PathControl,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -72,13 +85,14 @@ pub struct ConnectorConfig {
     pub tls_sni: Option<String>,
 }
 
-impl From<ConnectorConfig> for BasicPeer {
+impl From<ConnectorConfig> for HttpPeer {
     fn from(val: ConnectorConfig) -> Self {
-        let mut beep = BasicPeer::new(&val.proxy_addr);
-        if let Some(sni) = val.tls_sni {
-            beep.sni = sni;
-        }
-        beep
+        let (tls, sni) = if let Some(sni) = val.tls_sni {
+            (true, sni)
+        } else {
+            (false, String::new())
+        };
+        HttpPeer::new(&val.proxy_addr, tls, sni)
     }
 }
 
@@ -112,7 +126,7 @@ pub enum ListenerKind {
 
 #[cfg(test)]
 pub mod test {
-    use pingora::upstreams::peer::BasicPeer;
+    use pingora::upstreams::peer::HttpPeer;
 
     use crate::config::{
         apply_toml, internal,
@@ -169,8 +183,11 @@ pub mod test {
                         },
                     ],
                     connector: ConnectorConfig {
-                        proxy_addr: "1.1.1.1:443".into(),
-                        tls_sni: Some(String::from("one.one.one.one")),
+                        proxy_addr: "91.107.223.4:443".into(),
+                        tls_sni: Some(String::from("onevariable.com")),
+                    },
+                    path_control: crate::config::toml::PathControl {
+                        upstream_request_filters: vec![],
                     },
                 },
                 ProxyConfig {
@@ -182,8 +199,11 @@ pub mod test {
                         },
                     }],
                     connector: ConnectorConfig {
-                        proxy_addr: "1.1.1.1:80".into(),
+                        proxy_addr: "91.107.223.4:80".into(),
                         tls_sni: None,
+                    },
+                    path_control: crate::config::toml::PathControl {
+                        upstream_request_filters: vec![],
                     },
                 },
             ],
@@ -214,10 +234,13 @@ pub mod test {
                             },
                         },
                     ],
-                    upstream: {
-                        let mut beep = BasicPeer::new("1.1.1.1:443");
-                        beep.sni = String::from("one.one.one.one");
-                        beep
+                    upstream: HttpPeer::new(
+                        "91.107.223.4:443",
+                        true,
+                        String::from("onevariable.com"),
+                    ),
+                    path_control: internal::PathControl {
+                        upstream_request_filters: vec![],
                     },
                 },
                 internal::ProxyConfig {
@@ -228,7 +251,10 @@ pub mod test {
                             tls: None,
                         },
                     }],
-                    upstream: BasicPeer::new("1.1.1.1:80"),
+                    upstream: HttpPeer::new("91.107.223.4:80", false, String::new()),
+                    path_control: internal::PathControl {
+                        upstream_request_filters: vec![],
+                    },
                 },
             ],
         };

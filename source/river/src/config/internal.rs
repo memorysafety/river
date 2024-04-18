@@ -6,11 +6,11 @@
 //! This is used as the buffer between any external stable UI, and internal
 //! impl details which may change at any time.
 
-use std::path::PathBuf;
+use std::{collections::HashMap, path::PathBuf};
 
 use pingora::{
     server::configuration::{Opt as PingoraOpt, ServerConf as PingoraServerConf},
-    upstreams::peer::BasicPeer,
+    upstreams::peer::HttpPeer,
 };
 
 /// River's internal configuration
@@ -65,6 +65,19 @@ impl Config {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct PathControl {
+    pub(crate) upstream_request_filters: Vec<HashMap<String, String>>,
+}
+
+impl From<super::toml::PathControl> for PathControl {
+    fn from(value: super::toml::PathControl) -> Self {
+        Self {
+            upstream_request_filters: value.upstream_request_filters,
+        }
+    }
+}
+
 //
 // Basic Proxy Configuration
 //
@@ -73,7 +86,8 @@ impl Config {
 pub struct ProxyConfig {
     pub(crate) name: String,
     pub(crate) listeners: Vec<ListenerConfig>,
-    pub(crate) upstream: BasicPeer,
+    pub(crate) upstream: HttpPeer,
+    pub(crate) path_control: PathControl,
 }
 
 impl From<super::toml::ProxyConfig> for ProxyConfig {
@@ -82,6 +96,7 @@ impl From<super::toml::ProxyConfig> for ProxyConfig {
             name: other.name,
             listeners: other.listeners.into_iter().map(Into::into).collect(),
             upstream: other.connector.into(),
+            path_control: other.path_control.into(),
         }
     }
 }

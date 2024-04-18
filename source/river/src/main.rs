@@ -1,11 +1,9 @@
 mod config;
 mod proxy;
 
-use std::sync::Arc;
+use pingora::{server::Server, services::Service};
 
-use pingora::{listeners::Listeners, server::Server, services::Service};
-
-use crate::{config::internal::ListenerKind, proxy::ProxyApp};
+use crate::{config::internal::ListenerKind, proxy::Modifiers};
 
 fn main() {
     tracing_subscriber::fmt::init();
@@ -25,7 +23,17 @@ fn main() {
     for beep in conf.basic_proxies {
         tracing::info!("Configuring Basic Proxy: {}", beep.name);
 
-        let mut listeners = Listeners::new();
+        let modifiers = Modifiers::from_conf(&beep.path_control).unwrap();
+
+        let mut my_proxy = pingora_proxy::http_proxy_service_with_name(
+            &my_server.configuration,
+            proxy::MyProxy {
+                upstream: beep.upstream,
+                modifiers,
+            },
+            &beep.name,
+        );
+
         for list_cfg in beep.listeners {
             // NOTE: See https://github.com/cloudflare/pingora/issues/182 for tracking "paths aren't
             // always UTF-8 strings".
@@ -42,29 +50,21 @@ fn main() {
                         .to_str()
                         .expect("cert path should be utf8");
                     let key_path = tls_cfg.key_path.to_str().expect("key path should be utf8");
-                    listeners
+                    my_proxy
                         .add_tls(&addr, cert_path, key_path)
                         .expect("adding TLS listener shouldn't fail");
                 }
                 ListenerKind::Tcp { addr, tls: None } => {
-                    listeners.add_tcp(&addr);
+                    my_proxy.add_tcp(&addr);
                 }
                 ListenerKind::Uds(path) => {
                     let path = path.to_str().unwrap();
-                    listeners.add_uds(path, None); // todo
+                    my_proxy.add_uds(path, None); // todo
                 }
             }
         }
 
-        let upstream = ProxyApp::new(beep.upstream);
-
-        let svc = pingora_core::services::listening::Service::with_listeners(
-            beep.name,
-            listeners,
-            Arc::new(upstream),
-        );
-
-        services.push(Box::new(svc));
+        services.push(Box::new(my_proxy));
     }
 
     tracing::info!("Bootstrapping...");
