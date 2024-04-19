@@ -1,15 +1,22 @@
 //! Configuration sourced from a TOML file
 
-use std::path::{Path, PathBuf};
+use std::{
+    collections::BTreeMap,
+    path::{Path, PathBuf},
+};
 
-use pingora::upstreams::peer::BasicPeer;
+use pingora::upstreams::peer::HttpPeer;
 use serde::{Deserialize, Serialize};
 
+/// Configuration used for TOML formatted files
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub struct Toml {
+    /// System-wide configuration valies
     #[serde(default)]
     pub system: System,
+
+    /// Configuration for each Basic Proxy instance
     #[serde(default = "Vec::new")]
     pub basic_proxy: Vec<ProxyConfig>,
 }
@@ -54,31 +61,57 @@ impl System {
     }
 }
 
+/// Add Path Control Modifiers
+///
+/// Note that we use `BTreeMap` and NOT `HashMap`, as we want to maintain the
+/// ordering from the configuration file.
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Default)]
+#[serde(rename_all = "kebab-case")]
+pub struct PathControl {
+    #[serde(default = "Vec::new")]
+    pub upstream_request_filters: Vec<BTreeMap<String, String>>,
+    #[serde(default = "Vec::new")]
+    pub upstream_response_filters: Vec<BTreeMap<String, String>>,
+}
+
 //
 // Basic Proxy Configuration
 //
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[serde(rename_all = "kebab-case")]
 pub struct ProxyConfig {
+    /// Name of the Service. Used for logging.
     pub name: String,
+
+    /// Listeners - or "downstream" interfaces we listen to
     #[serde(default = "Vec::new")]
     pub listeners: Vec<ListenerConfig>,
+
+    /// Connector - our (currently single) "upstream" server
     pub connector: ConnectorConfig,
+    #[serde(default = "Default::default")]
+
+    /// Path Control, for modifying and filtering requests
+    pub path_control: PathControl,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct ConnectorConfig {
+    /// Proxy Address, e.g. `IP:port`
     pub proxy_addr: String,
+    /// TLS SNI, if TLS should be used
     pub tls_sni: Option<String>,
 }
 
-impl From<ConnectorConfig> for BasicPeer {
+impl From<ConnectorConfig> for HttpPeer {
     fn from(val: ConnectorConfig) -> Self {
-        let mut beep = BasicPeer::new(&val.proxy_addr);
-        if let Some(sni) = val.tls_sni {
-            beep.sni = sni;
-        }
-        beep
+        let (tls, sni) = if let Some(sni) = val.tls_sni {
+            (true, sni)
+        } else {
+            (false, String::new())
+        };
+        HttpPeer::new(&val.proxy_addr, tls, sni)
     }
 }
 
@@ -112,7 +145,7 @@ pub enum ListenerKind {
 
 #[cfg(test)]
 pub mod test {
-    use pingora::upstreams::peer::BasicPeer;
+    use pingora::upstreams::peer::HttpPeer;
 
     use crate::config::{
         apply_toml, internal,
@@ -169,8 +202,11 @@ pub mod test {
                         },
                     ],
                     connector: ConnectorConfig {
-                        proxy_addr: "1.1.1.1:443".into(),
-                        tls_sni: Some(String::from("one.one.one.one")),
+                        proxy_addr: "91.107.223.4:443".into(),
+                        tls_sni: Some(String::from("onevariable.com")),
+                    },
+                    path_control: crate::config::toml::PathControl {
+                        upstream_request_filters: vec![],
                     },
                 },
                 ProxyConfig {
@@ -182,8 +218,11 @@ pub mod test {
                         },
                     }],
                     connector: ConnectorConfig {
-                        proxy_addr: "1.1.1.1:80".into(),
+                        proxy_addr: "91.107.223.4:80".into(),
                         tls_sni: None,
+                    },
+                    path_control: crate::config::toml::PathControl {
+                        upstream_request_filters: vec![],
                     },
                 },
             ],
@@ -214,10 +253,13 @@ pub mod test {
                             },
                         },
                     ],
-                    upstream: {
-                        let mut beep = BasicPeer::new("1.1.1.1:443");
-                        beep.sni = String::from("one.one.one.one");
-                        beep
+                    upstream: HttpPeer::new(
+                        "91.107.223.4:443",
+                        true,
+                        String::from("onevariable.com"),
+                    ),
+                    path_control: internal::PathControl {
+                        upstream_request_filters: vec![],
                     },
                 },
                 internal::ProxyConfig {
@@ -228,7 +270,10 @@ pub mod test {
                             tls: None,
                         },
                     }],
-                    upstream: BasicPeer::new("1.1.1.1:80"),
+                    upstream: HttpPeer::new("91.107.223.4:80", false, String::new()),
+                    path_control: internal::PathControl {
+                        upstream_request_filters: vec![],
+                    },
                 },
             ],
         };
