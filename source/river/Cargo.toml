@@ -62,22 +62,22 @@ features = [
 #
 # git = "https://github.com/cloudflare/pingora"
 #
-# NOTE: currently tracking https://github.com/cloudflare/pingora/pull/165
+# NOTE: currently tracking https://github.com/cloudflare/pingora/pull/218
 git = "https://github.com/memorysafety/pingora"
-rev = "a8a476eefb4703a2996dbe118778fb0e7539d348"
+rev = "8727b2466f9a11aec6c5386c61c51ce54946b962"
 # path = "../../../pingora/pingora"
 
 [dependencies.pingora-core]
 git = "https://github.com/memorysafety/pingora"
-rev = "a8a476eefb4703a2996dbe118778fb0e7539d348"
+rev = "8727b2466f9a11aec6c5386c61c51ce54946b962"
 # path = "../../../pingora/pingora-core"
 
 [dependencies.pingora-proxy]
 git = "https://github.com/memorysafety/pingora"
-rev = "a8a476eefb4703a2996dbe118778fb0e7539d348"
+rev = "8727b2466f9a11aec6c5386c61c51ce54946b962"
 # path = "../../../pingora/pingora-proxy"
 
 [dependencies.pingora-http]
 git = "https://github.com/memorysafety/pingora"
-rev = "a8a476eefb4703a2996dbe118778fb0e7539d348"
+rev = "8727b2466f9a11aec6c5386c61c51ce54946b962"
 # path = "../../../pingora/pingora-http"
