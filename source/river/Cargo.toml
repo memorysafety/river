@@ -3,9 +3,9 @@ name          = "river"
 
 # VERSION NOTE:
 #
-# We need to start our numbering at 0.2.0, as there was a parked
-# crate published using 0.1.0. We should yank that version and
-# remove this comment block when publishing v0.2.0.
+# Once we have our first crates-io release, we should yank the v0.1
+# placeholder release. At the moment, we can't publish on crates-io
+# as we are carrying patches of pingora.
 version       = "0.2.0"
 
 authors       = [
