@@ -6,7 +6,7 @@ name          = "river"
 # Once we have our first crates-io release, we should yank the v0.1
 # placeholder release. At the moment, we can't publish on crates-io
 # as we are carrying patches of pingora.
-version       = "0.2.0"
+version       = "0.2.1"
 
 authors       = [
     "James Munns <james@onevariable.com>",
