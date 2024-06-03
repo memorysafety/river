@@ -4,10 +4,32 @@
 
 ## Current State
 
-As part of the initial [Kickstart Spike], we are working towards an early preview of
-the `river` tool.
+We reached the [initial v0.2.0 release] at the end of April (and a small [v0.2.1 release]
+for crates.io availability in May), completing the work in [Kickstart Spike 1].
 
-[Kickstart Spike]: https://github.com/memorysafety/river/milestone/1
+As of the end of May, work towards the next features in [Kickstart Spike 2] has begun.
+
+The next work is focused on:
+
+1. Development of "multiple upstream" features, including:
+    * Supporting Load Balancing of upstream servers
+    * Supporting Health Checks of upstream servers
+    * Supporting Service Discovery of upstream servers
+2. Developer and Operator Quality of Life features, including:
+    * Supporting basic static HTML file serving
+    * Supporting semi-dynamic observability endpoints, e.g. for Prometheus polling
+    * Support for hot-reloading of configuration
+    * CI for build and test checks on pull requests
+3. Development of initial Robustness features, including:
+    * Rate limiting of connections and/or requests
+    * CIDR/API range-based filtering for rejecting connections
+
+Stay tuned for updates on these features!
+
+[initial v0.2.0 release]: https://github.com/memorysafety/river/releases/tag/v0.2.0
+[v0.2.1 release]: https://github.com/memorysafety/river/releases/tag/v0.2.1
+[Kickstart Spike 1]: https://github.com/memorysafety/river/milestone/1
+[Kickstart Spike 2]: https://github.com/memorysafety/river/milestone/3
 
 **Until further notice, there is no expectation of stability.**
 
