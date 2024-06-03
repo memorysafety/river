@@ -6,7 +6,7 @@ name          = "river"
 # Once we have our first crates-io release, we should yank the v0.1
 # placeholder release. At the moment, we can't publish on crates-io
 # as we are carrying patches of pingora.
-version       = "0.2.0"
+version       = "0.2.1"
 
 authors       = [
     "James Munns <james@onevariable.com>",
@@ -55,29 +55,16 @@ features = [
     "derive"
 ]
 
+# Pingora dependencies
+
 [dependencies.pingora]
-# NOTE: For now we are tracking the git repo. We'll need
-# to switch back to published versions before publishing
-# river. We can coordinate with the `pingora` team for this.
-#
-# git = "https://github.com/cloudflare/pingora"
-#
-# NOTE: currently tracking https://github.com/cloudflare/pingora/pull/165
-git = "https://github.com/memorysafety/pingora"
-rev = "a8a476eefb4703a2996dbe118778fb0e7539d348"
-# path = "../../../pingora/pingora"
+version = "0.2.0"
 
 [dependencies.pingora-core]
-git = "https://github.com/memorysafety/pingora"
-rev = "a8a476eefb4703a2996dbe118778fb0e7539d348"
-# path = "../../../pingora/pingora-core"
+version = "0.2.0"
 
 [dependencies.pingora-proxy]
-git = "https://github.com/memorysafety/pingora"
-rev = "a8a476eefb4703a2996dbe118778fb0e7539d348"
-# path = "../../../pingora/pingora-proxy"
+version = "0.2.0"
 
 [dependencies.pingora-http]
-git = "https://github.com/memorysafety/pingora"
-rev = "a8a476eefb4703a2996dbe118778fb0e7539d348"
-# path = "../../../pingora/pingora-http"
+version = "0.2.0"
