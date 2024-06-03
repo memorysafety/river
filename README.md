@@ -7,7 +7,7 @@
 We reached the [initial v0.2.0 release] at the end of April (and a small [v0.2.1 release]
 for crates.io availability in May), completing the work in [Kickstart Spike 1].
 
-As of the end of May, work towards the next features in [Kickstart Spike 2] have begun.
+As of the end of May, work towards the next features in [Kickstart Spike 2] has begun.
 
 The next work is focused on:
 
