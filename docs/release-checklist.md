@@ -14,4 +14,9 @@ The following is the release checklist for each version of `river`.
 * [ ] Release to crates.io using `cargo publish`
 * [ ] Edit the release on github, using the "Generate release notes" feature.
       Move the generated "What's Changed" section to the top of the release.
+* [ ] If we made any changes to the configuration file format or other major changes,
+      make a PR to the [Homebrew formula] (only necessary for breaking changes, otherwise
+      it should "autobump" when the new GH release is noticed).
 * [ ] Announce the release in various places
+
+[Homebrew formula]: https://github.com/Homebrew/homebrew-core/blob/master/Formula/r/river.rb
