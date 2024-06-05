@@ -1,10 +1,3 @@
-//! This is the *actual* internal configuration structure.
-//!
-//! It is ONLY used for the internal configuration, and should not ever
-//! be exposed as the public API for CLI, Env vars, or via Serde.
-//!
-//! This is used as the buffer between any external stable UI, and internal
-//! impl details which may change at any time.
 
 use std::{collections::BTreeMap, path::PathBuf};
 
@@ -100,65 +93,12 @@ pub enum ListenerKind {
     Uds(PathBuf),
 }
 
-//
-// Boilerplate trait impls
-//
-
 impl Default for Config {
     fn default() -> Self {
         Self {
             validate_configs: false,
             threads_per_service: 8,
             basic_proxies: vec![],
-        }
-    }
-}
-
-impl From<super::toml::ProxyConfig> for ProxyConfig {
-    fn from(other: super::toml::ProxyConfig) -> Self {
-        Self {
-            name: other.name,
-            listeners: other.listeners.into_iter().map(Into::into).collect(),
-            upstream: other.connector.into(),
-            path_control: other.path_control.into(),
-        }
-    }
-}
-
-impl From<super::toml::PathControl> for PathControl {
-    fn from(value: super::toml::PathControl) -> Self {
-        Self {
-            upstream_request_filters: value.upstream_request_filters,
-            upstream_response_filters: value.upstream_response_filters,
-        }
-    }
-}
-
-impl From<super::toml::ListenerTlsConfig> for TlsConfig {
-    fn from(other: super::toml::ListenerTlsConfig) -> Self {
-        Self {
-            cert_path: other.cert_path,
-            key_path: other.key_path,
-        }
-    }
-}
-
-impl From<super::toml::ListenerConfig> for ListenerConfig {
-    fn from(other: super::toml::ListenerConfig) -> Self {
-        Self {
-            source: other.source.into(),
-        }
-    }
-}
-
-impl From<super::toml::ListenerKind> for ListenerKind {
-    fn from(other: super::toml::ListenerKind) -> Self {
-        match other {
-            super::toml::ListenerKind::Tcp { addr, tls } => ListenerKind::Tcp {
-                addr,
-                tls: tls.map(Into::into),
-            },
-            super::toml::ListenerKind::Uds(a) => ListenerKind::Uds(a),
         }
     }
 }

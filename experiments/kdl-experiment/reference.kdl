@@ -1,0 +1,13 @@
+system {
+    threads-per-service 8
+}
+
+services {
+    "example1" {
+
+    }
+
+    "example2" {
+
+    }
+}
