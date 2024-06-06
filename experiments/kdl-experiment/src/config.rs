@@ -55,7 +55,7 @@ impl Config {
 ///
 /// Note that we use `BTreeMap` and NOT `HashMap`, as we want to maintain the
 /// ordering from the configuration file.
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone)]
 pub struct PathControl {
     pub(crate) upstream_request_filters: Vec<BTreeMap<String, String>>,
     pub(crate) upstream_response_filters: Vec<BTreeMap<String, String>>,

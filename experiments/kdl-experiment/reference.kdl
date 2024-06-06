@@ -3,11 +3,36 @@ system {
 }
 
 services {
-    "example1" {
+    Example1 {
+        listeners {
+            "0.0.0.0:8080"
+            "0.0.0.0:4443" cert-path="./assets/test.crt" key-path="./assets/test.key"
+            "0.0.0.0:8443" cert-path="./assets/test.crt" key-path="./assets/test.key"
+        }
 
+        connectors {
+            "91.107.223.4:443" tls-sni="onevariable.com"
+        }
+
+        path-control {
+            upstream-request {
+                filter kind="remove-header-key-regex" pattern=".*SECRET.*"
+                filter kind="remove-header-key-regex" pattern=".*secret.*"
+                filter kind="upsert-header" key="x-proxy-friend" value="river"
+            }
+            upstream-response {
+                filter kind="remove-header-key-regex" pattern=".*ETag.*"
+                filter kind="upsert-header" key="x-with-love-from" value="river"
+            }
+        }
     }
 
-    "example2" {
-
+    Example2 {
+        listeners {
+            "0.0.0.0:8000"
+        }
+        connectors {
+            "91.107.223.4:80"
+        }
     }
 }
