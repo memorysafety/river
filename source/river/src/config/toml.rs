@@ -143,8 +143,59 @@ pub enum ListenerKind {
     Uds(PathBuf),
 }
 
+impl From<ProxyConfig> for super::internal::ProxyConfig {
+    fn from(other: ProxyConfig) -> Self {
+        Self {
+            name: other.name,
+            listeners: other.listeners.into_iter().map(Into::into).collect(),
+            upstream: other.connector.into(),
+            path_control: other.path_control.into(),
+        }
+    }
+}
+
+impl From<PathControl> for super::internal::PathControl {
+    fn from(value: PathControl) -> Self {
+        Self {
+            upstream_request_filters: value.upstream_request_filters,
+            upstream_response_filters: value.upstream_response_filters,
+        }
+    }
+}
+
+impl From<ListenerTlsConfig> for super::internal::TlsConfig {
+    fn from(other: ListenerTlsConfig) -> Self {
+        Self {
+            cert_path: other.cert_path,
+            key_path: other.key_path,
+        }
+    }
+}
+
+impl From<ListenerConfig> for super::internal::ListenerConfig {
+    fn from(other: ListenerConfig) -> Self {
+        Self {
+            source: other.source.into(),
+        }
+    }
+}
+
+impl From<ListenerKind> for super::internal::ListenerKind {
+    fn from(other: ListenerKind) -> Self {
+        match other {
+            ListenerKind::Tcp { addr, tls } => super::internal::ListenerKind::Tcp {
+                addr,
+                tls: tls.map(Into::into),
+            },
+            ListenerKind::Uds(a) => super::internal::ListenerKind::Uds(a),
+        }
+    }
+}
+
 #[cfg(test)]
 pub mod test {
+    use std::collections::BTreeMap;
+
     use pingora::upstreams::peer::HttpPeer;
 
     use crate::config::{
@@ -206,7 +257,28 @@ pub mod test {
                         tls_sni: Some(String::from("onevariable.com")),
                     },
                     path_control: crate::config::toml::PathControl {
-                        upstream_request_filters: vec![],
+                        upstream_request_filters: vec![
+                            BTreeMap::from([
+                                ("kind".to_string(), "remove-header-key-regex".to_string()),
+                                ("pattern".to_string(), ".*(secret|SECRET).*".to_string()),
+                            ]),
+                            BTreeMap::from([
+                                ("key".to_string(), "x-proxy-friend".to_string()),
+                                ("kind".to_string(), "upsert-header".to_string()),
+                                ("value".to_string(), "river".to_string()),
+                            ]),
+                        ],
+                        upstream_response_filters: vec![
+                            BTreeMap::from([
+                                ("kind".to_string(), "remove-header-key-regex".to_string()),
+                                ("pattern".to_string(), ".*ETag.*".to_string()),
+                            ]),
+                            BTreeMap::from([
+                                ("key".to_string(), "x-with-love-from".to_string()),
+                                ("kind".to_string(), "upsert-header".to_string()),
+                                ("value".to_string(), "river".to_string()),
+                            ]),
+                        ],
                     },
                 },
                 ProxyConfig {
@@ -223,6 +295,7 @@ pub mod test {
                     },
                     path_control: crate::config::toml::PathControl {
                         upstream_request_filters: vec![],
+                        upstream_response_filters: vec![],
                     },
                 },
             ],
@@ -259,7 +332,28 @@ pub mod test {
                         String::from("onevariable.com"),
                     ),
                     path_control: internal::PathControl {
-                        upstream_request_filters: vec![],
+                        upstream_request_filters: vec![
+                            BTreeMap::from([
+                                ("kind".to_string(), "remove-header-key-regex".to_string()),
+                                ("pattern".to_string(), ".*(secret|SECRET).*".to_string()),
+                            ]),
+                            BTreeMap::from([
+                                ("key".to_string(), "x-proxy-friend".to_string()),
+                                ("kind".to_string(), "upsert-header".to_string()),
+                                ("value".to_string(), "river".to_string()),
+                            ]),
+                        ],
+                        upstream_response_filters: vec![
+                            BTreeMap::from([
+                                ("kind".to_string(), "remove-header-key-regex".to_string()),
+                                ("pattern".to_string(), ".*ETag.*".to_string()),
+                            ]),
+                            BTreeMap::from([
+                                ("key".to_string(), "x-with-love-from".to_string()),
+                                ("kind".to_string(), "upsert-header".to_string()),
+                                ("value".to_string(), "river".to_string()),
+                            ]),
+                        ],
                     },
                 },
                 internal::ProxyConfig {
@@ -273,6 +367,7 @@ pub mod test {
                     upstream: HttpPeer::new("91.107.223.4:80", false, String::new()),
                     path_control: internal::PathControl {
                         upstream_request_filters: vec![],
+                        upstream_response_filters: vec![],
                     },
                 },
             ],
@@ -285,54 +380,5 @@ pub mod test {
         // implementing the trait. Since we only need this for testing, this is...
         // sort of acceptable
         assert_eq!(format!("{sys_snapshot:?}"), format!("{cfg:?}"));
-    }
-}
-
-impl From<ProxyConfig> for super::internal::ProxyConfig {
-    fn from(other: ProxyConfig) -> Self {
-        Self {
-            name: other.name,
-            listeners: other.listeners.into_iter().map(Into::into).collect(),
-            upstream: other.connector.into(),
-            path_control: other.path_control.into(),
-        }
-    }
-}
-
-impl From<PathControl> for super::internal::PathControl {
-    fn from(value: PathControl) -> Self {
-        Self {
-            upstream_request_filters: value.upstream_request_filters,
-            upstream_response_filters: value.upstream_response_filters,
-        }
-    }
-}
-
-impl From<ListenerTlsConfig> for super::internal::TlsConfig {
-    fn from(other: ListenerTlsConfig) -> Self {
-        Self {
-            cert_path: other.cert_path,
-            key_path: other.key_path,
-        }
-    }
-}
-
-impl From<ListenerConfig> for super::internal::ListenerConfig {
-    fn from(other: ListenerConfig) -> Self {
-        Self {
-            source: other.source.into(),
-        }
-    }
-}
-
-impl From<ListenerKind> for super::internal::ListenerKind {
-    fn from(other: ListenerKind) -> Self {
-        match other {
-            ListenerKind::Tcp { addr, tls } => super::internal::ListenerKind::Tcp {
-                addr,
-                tls: tls.map(Into::into),
-            },
-            ListenerKind::Uds(a) => super::internal::ListenerKind::Uds(a),
-        }
     }
 }
