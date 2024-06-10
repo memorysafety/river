@@ -1,6 +1,9 @@
 pub mod cli;
 pub mod internal;
+pub mod kdl;
 pub mod toml;
+
+use std::fs::read_to_string;
 
 use clap::Parser;
 use cli::Cli;
@@ -21,12 +24,20 @@ pub fn render_config() -> internal::Config {
         "CLI config"
     );
 
-    let toml_opts = if let Some(toml_path) = c.config_toml.as_ref() {
-        Some(Toml::from_path(toml_path))
-    } else {
-        tracing::info!("No TOML file provided");
-        None
-    };
+    let toml_opts = c.config_toml.as_ref().map(Toml::from_path);
+
+    let kdl_opts = c.config_kdl.as_ref().map(|kdl_path| {
+        let kdl_contents = read_to_string(kdl_path).unwrap_or_else(|e| {
+            panic!("Error loading KDL file: {e:?}");
+        });
+        let doc: ::kdl::KdlDocument = kdl_contents.parse().unwrap_or_else(|e| {
+            panic!("Error parsing KDL file: {e:?}");
+        });
+        let val: internal::Config = doc.try_into().unwrap_or_else(|e| {
+            panic!("Error rendering config from KDL file: {e:?}");
+        });
+        val
+    });
 
     // 2.6.7: River MUST give the following priority to configuration:
     //   1. Command Line Options (highest priority)
@@ -34,10 +45,25 @@ pub fn render_config() -> internal::Config {
     //   3. Configuration File Options (lowest priority)
     //
     // Apply in reverse order as we are layering.
-    if let Some(tf) = toml_opts {
-        tracing::info!("Applying TOML options");
-        apply_toml(&mut config, &tf);
+    // match (toml_opts)
+    match (toml_opts, kdl_opts) {
+        (Some(tf), None) => {
+            tracing::info!("Applying TOML options");
+            apply_toml(&mut config, &tf);
+        }
+        (None, Some(kf)) => {
+            tracing::info!("Applying KDL options");
+            config = kf;
+        }
+        (None, None) => {
+            tracing::info!("No configuration file provided");
+        }
+        (Some(_), Some(_)) => {
+            tracing::error!("Refusing to merge KDL and TOML options: Please choose one.");
+            panic!("Too many configuration options selected!");
+        }
     }
+
     tracing::info!("Applying CLI options");
     apply_cli(&mut config, &c);
 
@@ -50,6 +76,7 @@ fn apply_cli(conf: &mut internal::Config, cli: &Cli) {
         validate_configs,
         threads_per_service,
         config_toml: _,
+        config_kdl: _,
     } = cli;
 
     conf.validate_configs |= validate_configs;

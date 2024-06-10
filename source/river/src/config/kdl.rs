@@ -1,34 +1,10 @@
-#![allow(dead_code)]
+use std::{collections::BTreeMap, net::SocketAddr, path::PathBuf};
 
-use std::{
-    collections::BTreeMap,
-    fs::read_to_string,
-    net::SocketAddr,
-    path::PathBuf,
-};
-
-use config::{Config, ListenerConfig, ListenerKind, PathControl, ProxyConfig, TlsConfig};
 use kdl::{KdlDocument, KdlEntry, KdlNode};
-use miette::{Diagnostic, SourceSpan};
+use miette::{bail, Diagnostic, SourceSpan};
 use pingora::upstreams::peer::HttpPeer;
 
-mod config;
-
-fn main() {
-    inner_main().unwrap();
-}
-
-fn inner_main() -> miette::Result<()> {
-    let kdl_contents = read_to_string("./reference.kdl").unwrap();
-    // println!("KDL\n{kdl_contents:?}");
-    let doc: KdlDocument = kdl_contents.parse()?;
-
-    let val: Config = doc.try_into()?;
-
-    println!("{val:#?}");
-
-    Ok(())
-}
+use super::internal::{Config, ListenerConfig, ListenerKind, PathControl, ProxyConfig, TlsConfig};
 
 impl TryFrom<KdlDocument> for Config {
     type Error = miette::Error;
@@ -148,7 +124,7 @@ fn collect_filters(
     let mut fout = vec![];
     for (_node, name, args) in filters {
         if name != "filter" {
-            panic!()
+            bail!("Invalid Filter Rule");
         }
         let args = str_str_args(doc, args)?;
         fout.push(

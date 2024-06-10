@@ -62,7 +62,7 @@ impl Config {
 ///
 /// Note that we use `BTreeMap` and NOT `HashMap`, as we want to maintain the
 /// ordering from the configuration file.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct PathControl {
     pub(crate) upstream_request_filters: Vec<BTreeMap<String, String>>,
     pub(crate) upstream_response_filters: Vec<BTreeMap<String, String>>,
@@ -110,55 +110,6 @@ impl Default for Config {
             validate_configs: false,
             threads_per_service: 8,
             basic_proxies: vec![],
-        }
-    }
-}
-
-impl From<super::toml::ProxyConfig> for ProxyConfig {
-    fn from(other: super::toml::ProxyConfig) -> Self {
-        Self {
-            name: other.name,
-            listeners: other.listeners.into_iter().map(Into::into).collect(),
-            upstream: other.connector.into(),
-            path_control: other.path_control.into(),
-        }
-    }
-}
-
-impl From<super::toml::PathControl> for PathControl {
-    fn from(value: super::toml::PathControl) -> Self {
-        Self {
-            upstream_request_filters: value.upstream_request_filters,
-            upstream_response_filters: value.upstream_response_filters,
-        }
-    }
-}
-
-impl From<super::toml::ListenerTlsConfig> for TlsConfig {
-    fn from(other: super::toml::ListenerTlsConfig) -> Self {
-        Self {
-            cert_path: other.cert_path,
-            key_path: other.key_path,
-        }
-    }
-}
-
-impl From<super::toml::ListenerConfig> for ListenerConfig {
-    fn from(other: super::toml::ListenerConfig) -> Self {
-        Self {
-            source: other.source.into(),
-        }
-    }
-}
-
-impl From<super::toml::ListenerKind> for ListenerKind {
-    fn from(other: super::toml::ListenerKind) -> Self {
-        match other {
-            super::toml::ListenerKind::Tcp { addr, tls } => ListenerKind::Tcp {
-                addr,
-                tls: tls.map(Into::into),
-            },
-            super::toml::ListenerKind::Uds(a) => ListenerKind::Uds(a),
         }
     }
 }
