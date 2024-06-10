@@ -1,11 +1,6 @@
 #![allow(dead_code)]
 
-use std::{
-    collections::BTreeMap,
-    fs::read_to_string,
-    net::SocketAddr,
-    path::PathBuf,
-};
+use std::{collections::BTreeMap, fs::read_to_string, net::SocketAddr, path::PathBuf};
 
 use config::{Config, ListenerConfig, ListenerKind, PathControl, ProxyConfig, TlsConfig};
 use kdl::{KdlDocument, KdlEntry, KdlNode};
