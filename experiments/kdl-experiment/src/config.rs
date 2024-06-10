@@ -1,10 +1,3 @@
-//! This is the *actual* internal configuration structure.
-//!
-//! It is ONLY used for the internal configuration, and should not ever
-//! be exposed as the public API for CLI, Env vars, or via Serde.
-//!
-//! This is used as the buffer between any external stable UI, and internal
-//! impl details which may change at any time.
 
 use std::{collections::BTreeMap, path::PathBuf};
 
@@ -62,7 +55,7 @@ impl Config {
 ///
 /// Note that we use `BTreeMap` and NOT `HashMap`, as we want to maintain the
 /// ordering from the configuration file.
-#[derive(Debug, Clone, Default)]
+#[derive(Default, Debug, Clone)]
 pub struct PathControl {
     pub(crate) upstream_request_filters: Vec<BTreeMap<String, String>>,
     pub(crate) upstream_response_filters: Vec<BTreeMap<String, String>>,
@@ -99,10 +92,6 @@ pub enum ListenerKind {
     },
     Uds(PathBuf),
 }
-
-//
-// Boilerplate trait impls
-//
 
 impl Default for Config {
     fn default() -> Self {

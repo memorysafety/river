@@ -14,6 +14,10 @@ pub struct Cli {
     #[arg(long)]
     pub config_toml: Option<PathBuf>,
 
+    /// Path to the configuration file in KDL format
+    #[arg(long)]
+    pub config_kdl: Option<PathBuf>,
+
     /// Number of threads used in the worker pool for EACH service
     #[arg(long)]
     pub threads_per_service: Option<usize>,

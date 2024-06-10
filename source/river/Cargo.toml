@@ -29,6 +29,9 @@ regex = "1.10.4"
 tokio = "1.37.0" # TODO: check for implicit feature usage
 toml = "0.8.12"
 tracing = "0.1.40"
+kdl = "4.6.0"
+miette = { version = "5.10.0", features = ["fancy"] }
+thiserror = "1.0.61"
 
 [dependencies.tracing-subscriber]
 version  = "0.3.18"

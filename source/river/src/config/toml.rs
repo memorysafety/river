@@ -287,3 +287,52 @@ pub mod test {
         assert_eq!(format!("{sys_snapshot:?}"), format!("{cfg:?}"));
     }
 }
+
+impl From<ProxyConfig> for super::internal::ProxyConfig {
+    fn from(other: ProxyConfig) -> Self {
+        Self {
+            name: other.name,
+            listeners: other.listeners.into_iter().map(Into::into).collect(),
+            upstream: other.connector.into(),
+            path_control: other.path_control.into(),
+        }
+    }
+}
+
+impl From<PathControl> for super::internal::PathControl {
+    fn from(value: PathControl) -> Self {
+        Self {
+            upstream_request_filters: value.upstream_request_filters,
+            upstream_response_filters: value.upstream_response_filters,
+        }
+    }
+}
+
+impl From<ListenerTlsConfig> for super::internal::TlsConfig {
+    fn from(other: ListenerTlsConfig) -> Self {
+        Self {
+            cert_path: other.cert_path,
+            key_path: other.key_path,
+        }
+    }
+}
+
+impl From<ListenerConfig> for super::internal::ListenerConfig {
+    fn from(other: ListenerConfig) -> Self {
+        Self {
+            source: other.source.into(),
+        }
+    }
+}
+
+impl From<ListenerKind> for super::internal::ListenerKind {
+    fn from(other: ListenerKind) -> Self {
+        match other {
+            ListenerKind::Tcp { addr, tls } => super::internal::ListenerKind::Tcp {
+                addr,
+                tls: tls.map(Into::into),
+            },
+            ListenerKind::Uds(a) => super::internal::ListenerKind::Uds(a),
+        }
+    }
+}
