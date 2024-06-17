@@ -9,9 +9,13 @@ use std::collections::BTreeMap;
 use async_trait::async_trait;
 
 use pingora::{server::Server, Error};
-use pingora_core::{services::listening::Service, upstreams::peer::HttpPeer, Result};
+use pingora_core::{upstreams::peer::HttpPeer, Result};
 use pingora_http::{RequestHeader, ResponseHeader};
-use pingora_proxy::{HttpProxy, ProxyHttp, Session};
+use pingora_load_balancing::{
+    selection::{BackendIter, BackendSelection},
+    LoadBalancer,
+};
+use pingora_proxy::{ProxyHttp, Session};
 
 use crate::{
     config::internal::{ListenerKind, PathControl, ProxyConfig},
@@ -30,23 +34,34 @@ pub mod response_modifiers;
 /// of the [request/response lifecycle].
 ///
 /// [request/response lifecycle]: https://github.com/cloudflare/pingora/blob/7ce6f4ac1c440756a63b0766f72dbeca25c6fc94/docs/user_guide/phase_chart.md
-pub struct RiverProxyService {
-    /// Our single upstream server
-    pub upstream: HttpPeer,
+pub struct RiverProxyService<BS: BackendSelection> {
     /// All modifiers used when implementing the [ProxyHttp] trait.
     pub modifiers: Modifiers,
+    /// Load Balancer
+    pub load_balancer: LoadBalancer<BS>,
 }
 
-impl RiverProxyService {
+impl<BS> RiverProxyService<BS>
+where
+    BS: BackendSelection + Send + Sync + 'static,
+    BS::Iter: BackendIter,
+{
     /// Create a new [RiverProxyService] from the given [ProxyConfig]
-    pub fn from_basic_conf(conf: ProxyConfig, server: &Server) -> Service<HttpProxy<Self>> {
+    pub fn from_basic_conf(
+        conf: ProxyConfig,
+        server: &Server,
+    ) -> Box<dyn pingora::services::Service> {
         let modifiers = Modifiers::from_conf(&conf.path_control).unwrap();
+
+        let upstreams =
+            LoadBalancer::<BS>::try_from_iter(conf.upstreams.iter().map(|u| u._address.clone()))
+                .unwrap();
 
         let mut my_proxy = pingora_proxy::http_proxy_service_with_name(
             &server.configuration,
             Self {
-                upstream: conf.upstream,
                 modifiers,
+                load_balancer: upstreams,
             },
             &conf.name,
         );
@@ -81,7 +96,7 @@ impl RiverProxyService {
             }
         }
 
-        my_proxy
+        Box::new(my_proxy)
     }
 }
 
@@ -166,7 +181,11 @@ impl Modifiers {
 pub struct RiverContext {}
 
 #[async_trait]
-impl ProxyHttp for RiverProxyService {
+impl<BS> ProxyHttp for RiverProxyService<BS>
+where
+    BS: BackendSelection + Send + Sync + 'static,
+    BS::Iter: BackendIter,
+{
     type CTX = RiverContext;
 
     fn new_ctx(&self) -> Self::CTX {
@@ -182,8 +201,16 @@ impl ProxyHttp for RiverProxyService {
         _session: &mut Session,
         _ctx: &mut Self::CTX,
     ) -> Result<Box<HttpPeer>> {
+        let backend = self
+            .load_balancer
+            .select(
+                b"", // TODO: Is this configurable?
+                256,
+            )
+            .ok_or_else(|| pingora::Error::new_str("oops"))?;
+
         // For now, we only support one upstream
-        Ok(Box::new(self.upstream.clone()))
+        Ok(Box::new(HttpPeer::new(backend, true, "wrong".to_string())))
     }
 
     /// Handle the "upstream request filter" phase, where we can choose to make

@@ -3,6 +3,7 @@ mod proxy;
 
 use crate::proxy::RiverProxyService;
 use pingora::{server::Server, services::Service};
+use pingora_load_balancing::selection::RoundRobin;
 
 fn main() {
     // Set up tracing, including catching `log` crate logs from pingora crates
@@ -28,8 +29,8 @@ fn main() {
     // control, but don't support things like load balancing, health checks, etc.
     for beep in conf.basic_proxies {
         tracing::info!("Configuring Basic Proxy: {}", beep.name);
-        let service = RiverProxyService::from_basic_conf(beep, &my_server);
-        services.push(Box::new(service));
+        let service = RiverProxyService::<RoundRobin>::from_basic_conf(beep, &my_server);
+        services.push(service);
     }
 
     // Now we hand it over to pingora to run forever.

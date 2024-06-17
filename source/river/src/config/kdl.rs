@@ -4,7 +4,11 @@ use kdl::{KdlDocument, KdlEntry, KdlNode};
 use miette::{bail, Diagnostic, SourceSpan};
 use pingora::upstreams::peer::HttpPeer;
 
-use super::internal::{Config, ListenerConfig, ListenerKind, PathControl, ProxyConfig, TlsConfig};
+use crate::config::internal::{DiscoveryKind, HealthCheckKind, SelectionKind};
+
+use super::internal::{
+    Config, ListenerConfig, ListenerKind, PathControl, ProxyConfig, TlsConfig, UpstreamOptions,
+};
 
 impl TryFrom<KdlDocument> for Config {
     type Error = miette::Error;
@@ -159,11 +163,16 @@ fn extract_service(
     //
     let conn_node = required_child_doc(doc, node, "connectors")?;
     let conns = data_nodes(doc, conn_node)?;
-    if conns.len() != 1 {
-        return Err(Bad::docspan("exactly one connector required", doc, conn_node.span()).into());
-    }
     let mut conn_cfgs = vec![];
+    let mut load_balance: Option<UpstreamOptions> = None;
     for (node, name, args) in conns {
+        if name == "load-balance" {
+            if load_balance.is_some() {
+                todo!();
+            }
+            load_balance = Some(extract_load_balance(doc, node, name, args)?);
+            continue;
+        }
         let conn = extract_connector(doc, node, name, args)?;
         conn_cfgs.push(conn);
     }
@@ -186,7 +195,7 @@ fn extract_service(
     Ok(ProxyConfig {
         name: name.to_string(),
         listeners: list_cfgs,
-        upstream: conn_cfgs.pop().unwrap(),
+        upstreams: conn_cfgs,
         path_control: pc,
     })
 }
@@ -209,6 +218,88 @@ fn str_str_args<'a>(
         out.push((name, val));
     }
     Ok(out)
+}
+
+fn extract_load_balance(
+    doc: &KdlDocument,
+    node: &KdlNode,
+    name: &str,
+    args: &[KdlEntry],
+) -> miette::Result<UpstreamOptions> {
+    let items = data_nodes(
+        doc,
+        node.children()
+            .or_bail("'load-balance' should have children", doc, node.span())?,
+    )?;
+
+    let mut selection: Option<SelectionKind> = None;
+    let mut health: Option<HealthCheckKind> = None;
+    let mut discover: Option<DiscoveryKind> = None;
+
+    for (node, name, args) in items {
+        match name {
+            "selection" => {
+                selection = Some(extract_one_str_arg(
+                    doc,
+                    node,
+                    name,
+                    args,
+                    |val| match val {
+                        "RoundRobin" => Some(SelectionKind::RoundRobin),
+                        _ => None,
+                    },
+                )?);
+            }
+            "health-check" => {
+                health = Some(extract_one_str_arg(
+                    doc,
+                    node,
+                    name,
+                    args,
+                    |val| match val {
+                        "None" => Some(HealthCheckKind::None),
+                        _ => None,
+                    },
+                )?);
+            }
+            "discovery" => {
+                discover = Some(extract_one_str_arg(
+                    doc,
+                    node,
+                    name,
+                    args,
+                    |val| match val {
+                        "Static" => Some(DiscoveryKind::Static),
+                        _ => None,
+                    },
+                )?);
+            }
+            other => {
+                return Err(
+                    Bad::docspan(format!("Unknown setting: '{other}'"), doc, node.span()).into(),
+                );
+            }
+        }
+    }
+    Ok(UpstreamOptions {
+        selection: selection.unwrap_or(SelectionKind::RoundRobin),
+        health_checks: health.unwrap_or(HealthCheckKind::None),
+        discovery: discover.unwrap_or(DiscoveryKind::Static),
+    })
+}
+
+fn extract_one_str_arg<T, F: FnOnce(&str) -> Option<T>>(
+    doc: &KdlDocument,
+    node: &KdlNode,
+    name: &str,
+    args: &[KdlEntry],
+    f: F,
+) -> miette::Result<T> {
+    match args {
+        [one] => one.value().as_string().and_then(f),
+        _ => None,
+    }
+    .or_bail(format!("Incorrect argument for '{name}'"), doc, node.span())
 }
 
 /// Extracts a single connector from the `connectors` section

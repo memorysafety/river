@@ -148,7 +148,7 @@ impl From<ProxyConfig> for super::internal::ProxyConfig {
         Self {
             name: other.name,
             listeners: other.listeners.into_iter().map(Into::into).collect(),
-            upstream: other.connector.into(),
+            upstreams: vec![other.connector.into()],
             path_control: other.path_control.into(),
         }
     }
@@ -326,11 +326,11 @@ pub mod test {
                             },
                         },
                     ],
-                    upstream: HttpPeer::new(
+                    upstreams: vec![HttpPeer::new(
                         "91.107.223.4:443",
                         true,
                         String::from("onevariable.com"),
-                    ),
+                    )],
                     path_control: internal::PathControl {
                         upstream_request_filters: vec![
                             BTreeMap::from([
@@ -364,7 +364,7 @@ pub mod test {
                             tls: None,
                         },
                     }],
-                    upstream: HttpPeer::new("91.107.223.4:80", false, String::new()),
+                    upstreams: vec![HttpPeer::new("91.107.223.4:80", false, String::new())],
                     path_control: internal::PathControl {
                         upstream_request_filters: vec![],
                         upstream_response_filters: vec![],

@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
-members = [ "experiments/kdl-experiment",
+members = [
+    "experiments/kdl-experiment",
     "source/river",
 ]
 

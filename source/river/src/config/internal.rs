@@ -76,7 +76,7 @@ pub struct PathControl {
 pub struct ProxyConfig {
     pub(crate) name: String,
     pub(crate) listeners: Vec<ListenerConfig>,
-    pub(crate) upstream: HttpPeer,
+    pub(crate) upstreams: Vec<HttpPeer>,
     pub(crate) path_control: PathControl,
 }
 
@@ -99,6 +99,29 @@ pub enum ListenerKind {
     },
     Uds(PathBuf),
 }
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct UpstreamOptions {
+    pub(crate) selection: SelectionKind,
+    pub(crate) health_checks: HealthCheckKind,
+    pub(crate) discovery: DiscoveryKind,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum SelectionKind {
+    RoundRobin,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum HealthCheckKind {
+    None,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum DiscoveryKind {
+    Static,
+}
+
 
 //
 // Boilerplate trait impls
