@@ -122,7 +122,6 @@ pub enum DiscoveryKind {
     Static,
 }
 
-
 //
 // Boilerplate trait impls
 //
