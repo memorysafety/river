@@ -170,7 +170,7 @@ fn extract_service(
             if load_balance.is_some() {
                 todo!();
             }
-            load_balance = Some(extract_load_balance(doc, node, name, args)?);
+            load_balance = Some(extract_load_balance(doc, node)?);
             continue;
         }
         let conn = extract_connector(doc, node, name, args)?;
@@ -197,6 +197,7 @@ fn extract_service(
         listeners: list_cfgs,
         upstreams: conn_cfgs,
         path_control: pc,
+        upstream_options: load_balance.unwrap_or_default(),
     })
 }
 
@@ -220,12 +221,7 @@ fn str_str_args<'a>(
     Ok(out)
 }
 
-fn extract_load_balance(
-    doc: &KdlDocument,
-    node: &KdlNode,
-    name: &str,
-    args: &[KdlEntry],
-) -> miette::Result<UpstreamOptions> {
+fn extract_load_balance(doc: &KdlDocument, node: &KdlNode) -> miette::Result<UpstreamOptions> {
     let items = data_nodes(
         doc,
         node.children()
@@ -246,6 +242,9 @@ fn extract_load_balance(
                     args,
                     |val| match val {
                         "RoundRobin" => Some(SelectionKind::RoundRobin),
+                        "Random" => Some(SelectionKind::Random),
+                        "FNV" => Some(SelectionKind::Fnv),
+                        "Ketama" => Some(SelectionKind::Ketama),
                         _ => None,
                     },
                 )?);

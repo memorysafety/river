@@ -12,19 +12,25 @@ use pingora::{server::Server, Error};
 use pingora_core::{upstreams::peer::HttpPeer, Result};
 use pingora_http::{RequestHeader, ResponseHeader};
 use pingora_load_balancing::{
-    selection::{BackendIter, BackendSelection},
+    selection::{
+        consistent::KetamaHashing, BackendIter, BackendSelection, FVNHash, Random, RoundRobin,
+    },
     LoadBalancer,
 };
 use pingora_proxy::{ProxyHttp, Session};
 
 use crate::{
-    config::internal::{ListenerKind, PathControl, ProxyConfig},
+    config::internal::{ListenerKind, PathControl, ProxyConfig, SelectionKind},
     proxy::request_modifiers::RequestModifyMod,
 };
 
-use self::response_modifiers::ResponseModifyMod;
+use self::{
+    request_selector::{null_selector, RequestSelector},
+    response_modifiers::ResponseModifyMod,
+};
 
 pub mod request_modifiers;
+pub mod request_selector;
 pub mod response_modifiers;
 
 /// The [RiverProxyService] is intended to capture the behaviors used to extend
@@ -39,6 +45,32 @@ pub struct RiverProxyService<BS: BackendSelection> {
     pub modifiers: Modifiers,
     /// Load Balancer
     pub load_balancer: LoadBalancer<BS>,
+    pub request_selector: RequestSelector,
+}
+
+/// Create a proxy service, with the type parameters chosen based on the config file
+pub fn river_proxy_service(
+    conf: ProxyConfig,
+    server: &Server,
+) -> Box<dyn pingora::services::Service> {
+    // Pick the correctly monomorphized function. This makes the functions all have the
+    // same signature of `fn(...) -> Box<dyn Service>`.
+    type ServiceMaker =
+        fn(ProxyConfig, &Server, RequestSelector) -> Box<dyn pingora::services::Service>;
+    let (service_maker, selector): (ServiceMaker, RequestSelector) =
+        match conf.upstream_options.selection {
+            SelectionKind::RoundRobin => (
+                RiverProxyService::<RoundRobin>::from_basic_conf,
+                null_selector,
+            ),
+            SelectionKind::Random => (RiverProxyService::<Random>::from_basic_conf, null_selector),
+            SelectionKind::Fnv => (RiverProxyService::<FVNHash>::from_basic_conf, null_selector),
+            SelectionKind::Ketama => (
+                RiverProxyService::<KetamaHashing>::from_basic_conf,
+                null_selector,
+            ),
+        };
+    service_maker(conf, server, selector)
 }
 
 impl<BS> RiverProxyService<BS>
@@ -50,6 +82,7 @@ where
     pub fn from_basic_conf(
         conf: ProxyConfig,
         server: &Server,
+        selector: RequestSelector,
     ) -> Box<dyn pingora::services::Service> {
         let modifiers = Modifiers::from_conf(&conf.path_control).unwrap();
 
@@ -62,6 +95,7 @@ where
             Self {
                 modifiers,
                 load_balancer: upstreams,
+                request_selector: selector,
             },
             &conf.name,
         );
@@ -198,15 +232,15 @@ where
     /// is fairly easy!
     async fn upstream_peer(
         &self,
-        _session: &mut Session,
-        _ctx: &mut Self::CTX,
+        session: &mut Session,
+        ctx: &mut Self::CTX,
     ) -> Result<Box<HttpPeer>> {
+        let mut buf = [0u8; 64];
+        let hash = (self.request_selector)(&mut buf, ctx, session);
+
         let backend = self
             .load_balancer
-            .select(
-                b"", // TODO: Is this configurable?
-                256,
-            )
+            .select(hash, 256)
             .ok_or_else(|| pingora::Error::new_str("oops"))?;
 
         // For now, we only support one upstream

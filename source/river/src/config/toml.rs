@@ -8,6 +8,8 @@ use std::{
 use pingora::upstreams::peer::HttpPeer;
 use serde::{Deserialize, Serialize};
 
+use super::internal::UpstreamOptions;
+
 /// Configuration used for TOML formatted files
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "kebab-case")]
@@ -150,6 +152,7 @@ impl From<ProxyConfig> for super::internal::ProxyConfig {
             listeners: other.listeners.into_iter().map(Into::into).collect(),
             upstreams: vec![other.connector.into()],
             path_control: other.path_control.into(),
+            upstream_options: UpstreamOptions::default(),
         }
     }
 }

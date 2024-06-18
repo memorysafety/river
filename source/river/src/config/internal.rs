@@ -76,6 +76,7 @@ pub struct PathControl {
 pub struct ProxyConfig {
     pub(crate) name: String,
     pub(crate) listeners: Vec<ListenerConfig>,
+    pub(crate) upstream_options: UpstreamOptions,
     pub(crate) upstreams: Vec<HttpPeer>,
     pub(crate) path_control: PathControl,
 }
@@ -107,9 +108,22 @@ pub struct UpstreamOptions {
     pub(crate) discovery: DiscoveryKind,
 }
 
+impl Default for UpstreamOptions {
+    fn default() -> Self {
+        Self {
+            selection: SelectionKind::RoundRobin,
+            health_checks: HealthCheckKind::None,
+            discovery: DiscoveryKind::Static,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum SelectionKind {
     RoundRobin,
+    Random,
+    Fnv,
+    Ketama,
 }
 
 #[derive(Debug, PartialEq, Clone)]
