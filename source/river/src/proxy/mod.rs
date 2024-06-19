@@ -24,10 +24,7 @@ use crate::{
     proxy::request_modifiers::RequestModifyMod,
 };
 
-use self::{
-    request_selector::{null_selector, RequestSelector},
-    response_modifiers::ResponseModifyMod,
-};
+use self::{request_selector::RequestSelector, response_modifiers::ResponseModifyMod};
 
 pub mod request_modifiers;
 pub mod request_selector;
@@ -55,22 +52,15 @@ pub fn river_proxy_service(
 ) -> Box<dyn pingora::services::Service> {
     // Pick the correctly monomorphized function. This makes the functions all have the
     // same signature of `fn(...) -> Box<dyn Service>`.
-    type ServiceMaker =
-        fn(ProxyConfig, &Server, RequestSelector) -> Box<dyn pingora::services::Service>;
-    let (service_maker, selector): (ServiceMaker, RequestSelector) =
-        match conf.upstream_options.selection {
-            SelectionKind::RoundRobin => (
-                RiverProxyService::<RoundRobin>::from_basic_conf,
-                null_selector,
-            ),
-            SelectionKind::Random => (RiverProxyService::<Random>::from_basic_conf, null_selector),
-            SelectionKind::Fnv => (RiverProxyService::<FVNHash>::from_basic_conf, null_selector),
-            SelectionKind::Ketama => (
-                RiverProxyService::<KetamaHashing>::from_basic_conf,
-                null_selector,
-            ),
-        };
-    service_maker(conf, server, selector)
+    type ServiceMaker = fn(ProxyConfig, &Server) -> Box<dyn pingora::services::Service>;
+
+    let service_maker: ServiceMaker = match conf.upstream_options.selection {
+        SelectionKind::RoundRobin => RiverProxyService::<RoundRobin>::from_basic_conf,
+        SelectionKind::Random => RiverProxyService::<Random>::from_basic_conf,
+        SelectionKind::Fnv => RiverProxyService::<FVNHash>::from_basic_conf,
+        SelectionKind::Ketama => RiverProxyService::<KetamaHashing>::from_basic_conf,
+    };
+    service_maker(conf, server)
 }
 
 impl<BS> RiverProxyService<BS>
@@ -82,7 +72,6 @@ where
     pub fn from_basic_conf(
         conf: ProxyConfig,
         server: &Server,
-        selector: RequestSelector,
     ) -> Box<dyn pingora::services::Service> {
         let modifiers = Modifiers::from_conf(&conf.path_control).unwrap();
 
@@ -95,7 +84,7 @@ where
             Self {
                 modifiers,
                 load_balancer: upstreams,
-                request_selector: selector,
+                request_selector: conf.upstream_options.selector,
             },
             &conf.name,
         );
