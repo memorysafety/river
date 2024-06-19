@@ -13,6 +13,8 @@ use pingora::{
     upstreams::peer::HttpPeer,
 };
 
+use crate::proxy::request_selector::{null_selector, RequestSelector};
+
 /// River's internal configuration
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -104,6 +106,7 @@ pub enum ListenerKind {
 #[derive(Debug, PartialEq, Clone)]
 pub struct UpstreamOptions {
     pub(crate) selection: SelectionKind,
+    pub(crate) selector: RequestSelector,
     pub(crate) health_checks: HealthCheckKind,
     pub(crate) discovery: DiscoveryKind,
 }
@@ -112,6 +115,7 @@ impl Default for UpstreamOptions {
     fn default() -> Self {
         Self {
             selection: SelectionKind::RoundRobin,
+            selector: null_selector,
             health_checks: HealthCheckKind::None,
             discovery: DiscoveryKind::Static,
         }

@@ -1,10 +1,19 @@
-use std::{collections::BTreeMap, net::SocketAddr, path::PathBuf};
+use std::{
+    collections::{BTreeMap, HashMap},
+    net::SocketAddr,
+    path::PathBuf,
+};
 
 use kdl::{KdlDocument, KdlEntry, KdlNode};
 use miette::{bail, Diagnostic, SourceSpan};
 use pingora::upstreams::peer::HttpPeer;
 
-use crate::config::internal::{DiscoveryKind, HealthCheckKind, SelectionKind};
+use crate::{
+    config::internal::{DiscoveryKind, HealthCheckKind, SelectionKind},
+    proxy::request_selector::{
+        null_selector, source_addr_and_uri_path_selector, uri_path_selector, RequestSelector,
+    },
+};
 
 use super::internal::{
     Config, ListenerConfig, ListenerKind, PathControl, ProxyConfig, TlsConfig, UpstreamOptions,
@@ -231,23 +240,46 @@ fn extract_load_balance(doc: &KdlDocument, node: &KdlNode) -> miette::Result<Ups
     let mut selection: Option<SelectionKind> = None;
     let mut health: Option<HealthCheckKind> = None;
     let mut discover: Option<DiscoveryKind> = None;
+    let mut selector: RequestSelector = null_selector;
 
     for (node, name, args) in items {
         match name {
             "selection" => {
-                selection = Some(extract_one_str_arg(
-                    doc,
-                    node,
-                    name,
-                    args,
-                    |val| match val {
+                let (sel, args) =
+                    extract_one_str_arg_with_kv_args(doc, node, name, args, |val| match val {
                         "RoundRobin" => Some(SelectionKind::RoundRobin),
                         "Random" => Some(SelectionKind::Random),
                         "FNV" => Some(SelectionKind::Fnv),
                         "Ketama" => Some(SelectionKind::Ketama),
                         _ => None,
-                    },
-                )?);
+                    })?;
+                match sel {
+                    SelectionKind::RoundRobin | SelectionKind::Random => {
+                        // No key required, selection is random
+                    }
+                    SelectionKind::Fnv | SelectionKind::Ketama => {
+                        let sel_ty = args.get("key").or_bail(
+                            format!("selection {sel:?} requires a 'key' argument"),
+                            doc,
+                            node.span(),
+                        )?;
+
+                        selector = match sel_ty.as_str() {
+                            "UriPath" => uri_path_selector,
+                            "SourceAddrAndUriPath" => source_addr_and_uri_path_selector,
+                            other => {
+                                return Err(Bad::docspan(
+                                    format!("Unknown key: '{other}'"),
+                                    doc,
+                                    node.span(),
+                                )
+                                .into())
+                            }
+                        };
+                    }
+                }
+
+                selection = Some(sel);
             }
             "health-check" => {
                 health = Some(extract_one_str_arg(
@@ -282,6 +314,7 @@ fn extract_load_balance(doc: &KdlDocument, node: &KdlNode) -> miette::Result<Ups
     }
     Ok(UpstreamOptions {
         selection: selection.unwrap_or(SelectionKind::RoundRobin),
+        selector,
         health_checks: health.unwrap_or(HealthCheckKind::None),
         discovery: discover.unwrap_or(DiscoveryKind::Static),
     })
@@ -299,6 +332,38 @@ fn extract_one_str_arg<T, F: FnOnce(&str) -> Option<T>>(
         _ => None,
     }
     .or_bail(format!("Incorrect argument for '{name}'"), doc, node.span())
+}
+
+fn extract_one_str_arg_with_kv_args<T, F: FnOnce(&str) -> Option<T>>(
+    doc: &KdlDocument,
+    node: &KdlNode,
+    name: &str,
+    args: &[KdlEntry],
+    f: F,
+) -> miette::Result<(T, HashMap<String, String>)> {
+    let (first, rest) =
+        args.split_first()
+            .or_bail(format!("Missing arguments for '{name}'"), doc, node.span())?;
+    let first = first.value().as_string().and_then(f).or_bail(
+        format!("Incorrect argument for '{name}'"),
+        doc,
+        node.span(),
+    )?;
+    let mut kvs = HashMap::new();
+    rest.iter().try_for_each(|arg| -> miette::Result<()> {
+        let key = arg
+            .name()
+            .or_bail("Should be a named argument", doc, arg.span())?
+            .value();
+        let val = arg
+            .value()
+            .as_string()
+            .or_bail("Should be a string value", doc, arg.span())?;
+        kvs.insert(key.to_string(), val.to_string());
+        Ok(())
+    })?;
+
+    Ok((first, kvs))
 }
 
 /// Extracts a single connector from the `connectors` section

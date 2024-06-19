@@ -212,7 +212,9 @@ impl Modifiers {
 }
 
 /// Per-peer context. Not currently used
-pub struct RiverContext {}
+pub struct RiverContext {
+    selector_buf: Vec<u8>,
+}
 
 #[async_trait]
 impl<BS> ProxyHttp for RiverProxyService<BS>
@@ -223,7 +225,9 @@ where
     type CTX = RiverContext;
 
     fn new_ctx(&self) -> Self::CTX {
-        RiverContext {}
+        RiverContext {
+            selector_buf: Vec::new(),
+        }
     }
 
     /// Handle the "upstream peer" phase, where we pick which upstream to proxy to.
@@ -235,13 +239,14 @@ where
         session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> Result<Box<HttpPeer>> {
-        let mut buf = [0u8; 64];
-        let hash = (self.request_selector)(&mut buf, ctx, session);
+        let key = (self.request_selector)(ctx, session);
 
-        let backend = self
-            .load_balancer
-            .select(hash, 256)
-            .ok_or_else(|| pingora::Error::new_str("oops"))?;
+        let backend = self.load_balancer.select(key, 256);
+
+        // Manually clear the selector buf to avoid accidental leaks
+        ctx.selector_buf.clear();
+
+        let backend = backend.ok_or_else(|| pingora::Error::new_str("oops"))?;
 
         // For now, we only support one upstream
         Ok(Box::new(HttpPeer::new(backend, true, "wrong".to_string())))

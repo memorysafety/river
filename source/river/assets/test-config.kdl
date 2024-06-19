@@ -12,7 +12,7 @@ services {
 
         connectors {
             load-balance {
-                selection "RoundRobin"
+                selection "Ketama" key="UriPath"
                 discovery "Static"
                 health-check "None"
             }
