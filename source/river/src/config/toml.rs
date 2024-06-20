@@ -202,7 +202,8 @@ pub mod test {
     use pingora::upstreams::peer::HttpPeer;
 
     use crate::config::{
-        apply_toml, internal,
+        apply_toml,
+        internal::{self, UpstreamOptions},
         toml::{ConnectorConfig, ListenerConfig, ProxyConfig, System},
     };
 
@@ -358,6 +359,7 @@ pub mod test {
                             ]),
                         ],
                     },
+                    upstream_options: UpstreamOptions::default(),
                 },
                 internal::ProxyConfig {
                     name: "Example2".into(),
@@ -372,6 +374,7 @@ pub mod test {
                         upstream_request_filters: vec![],
                         upstream_response_filters: vec![],
                     },
+                    upstream_options: UpstreamOptions::default(),
                 },
             ],
         };

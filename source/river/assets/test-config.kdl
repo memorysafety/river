@@ -7,7 +7,6 @@ services {
         listeners {
             "0.0.0.0:8080"
             "0.0.0.0:4443" cert-path="./assets/test.crt" key-path="./assets/test.key"
-            "0.0.0.0:8443" cert-path="./assets/test.crt" key-path="./assets/test.key"
         }
 
         connectors {
@@ -21,8 +20,7 @@ services {
 
         path-control {
             upstream-request {
-                filter kind="remove-header-key-regex" pattern=".*SECRET.*"
-                filter kind="remove-header-key-regex" pattern=".*secret.*"
+                filter kind="remove-header-key-regex" pattern=".*(secret|SECRET).*"
                 filter kind="upsert-header" key="x-proxy-friend" value="river"
             }
             upstream-response {
