@@ -4,8 +4,21 @@ use kdl::{KdlDocument, KdlEntry, KdlNode};
 use miette::{bail, Diagnostic, SourceSpan};
 use pingora::upstreams::peer::HttpPeer;
 
-use super::internal::{Config, ListenerConfig, ListenerKind, PathControl, ProxyConfig, TlsConfig};
+use crate::{
+    config::internal::{
+        Config, DiscoveryKind, HealthCheckKind, ListenerConfig, ListenerKind, PathControl,
+        ProxyConfig, SelectionKind, TlsConfig, UpstreamOptions,
+    },
+    proxy::request_selector::{
+        null_selector, source_addr_and_uri_path_selector, uri_path_selector, RequestSelector,
+    },
+};
 
+#[cfg(test)]
+mod test;
+mod utils;
+
+/// This is the primary interface for parsing the document.
 impl TryFrom<KdlDocument> for Config {
     type Error = miette::Error;
 
@@ -21,78 +34,20 @@ impl TryFrom<KdlDocument> for Config {
     }
 }
 
-fn required_child_doc<'a>(
-    doc: &KdlDocument,
-    here: &'a KdlDocument,
-    name: &str,
-) -> miette::Result<&'a KdlDocument> {
-    let node = here
-        .get(name)
-        .or_bail(&format!("'{name}' is required!"), doc, here.span())?;
-
-    node.children()
-        .or_bail("expected a nested node", doc, node.span())
-}
-
-fn optional_child_doc<'a>(
-    _doc: &KdlDocument,
-    here: &'a KdlDocument,
-    name: &str,
-) -> Option<&'a KdlDocument> {
-    let node = here.get(name)?;
-
-    node.children()
-}
-
-fn wildcard_argless_child_docs<'a>(
-    doc: &KdlDocument,
-    here: &'a KdlDocument,
-) -> miette::Result<Vec<(&'a str, &'a KdlDocument)>> {
-    // TODO: assert no args?
-    let mut children = vec![];
-    for node in here.nodes() {
-        let name = node.name().value();
-        let child = node.children().or_bail(
-            &format!("'{name}' should be a nested block"),
-            doc,
-            node.span(),
-        )?;
-        children.push((name, child));
-    }
-    Ok(children)
-}
-
-/// Intended to be used with the internal nodes of a section, for example:
-///
-/// ```kdl
-/// listeners {
-/// //  vvvvvvvvvvvvvv <-------------------------------------- These are the &'str name parts
-///     "0.0.0.0:8080"                               // <\
-///     "0.0.0.0:4443"                               // <----- These are the data nodes
-///     "0.0.0.0:8443" cert-path="./assets/test.crt" // </
-/// //                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ <-------- These are the KdlEntry parts
-/// }
-/// ```
-fn data_nodes<'a>(
-    _doc: &KdlDocument,
-    here: &'a KdlDocument,
-) -> miette::Result<Vec<(&'a KdlNode, &'a str, &'a [KdlEntry])>> {
-    let mut out = vec![];
-    for node in here.nodes() {
-        out.push((node, node.name().value(), node.entries()));
-    }
-    Ok(out)
-}
-
 /// Extract all services from the top level document
 fn extract_services(doc: &KdlDocument) -> miette::Result<Vec<ProxyConfig>> {
-    let service_node = required_child_doc(doc, doc, "services")?;
-    let services = wildcard_argless_child_docs(doc, service_node)?;
+    let service_node = utils::required_child_doc(doc, doc, "services")?;
+    let services = utils::wildcard_argless_child_docs(doc, service_node)?;
 
     let mut proxies = vec![];
     for (name, service) in services {
         proxies.push(extract_service(doc, name, service)?);
     }
+
+    if proxies.is_empty() {
+        return Err(Bad::docspan("No services defined", doc, service_node.span()).into());
+    }
+
     Ok(proxies)
 }
 
@@ -120,13 +75,13 @@ fn collect_filters(
     doc: &KdlDocument,
     node: &KdlDocument,
 ) -> miette::Result<Vec<BTreeMap<String, String>>> {
-    let filters = data_nodes(doc, node)?;
+    let filters = utils::data_nodes(doc, node)?;
     let mut fout = vec![];
     for (_node, name, args) in filters {
         if name != "filter" {
             bail!("Invalid Filter Rule");
         }
-        let args = str_str_args(doc, args)?;
+        let args = utils::str_str_args(doc, args)?;
         fout.push(
             args.iter()
                 .map(|(k, v)| (k.to_string(), v.to_string()))
@@ -144,8 +99,8 @@ fn extract_service(
 ) -> miette::Result<ProxyConfig> {
     // Listeners
     //
-    let listener_node = required_child_doc(doc, node, "listeners")?;
-    let listeners = data_nodes(doc, listener_node)?;
+    let listener_node = utils::required_child_doc(doc, node, "listeners")?;
+    let listeners = utils::data_nodes(doc, listener_node)?;
     if listeners.is_empty() {
         return Err(Bad::docspan("nonzero listeners required", doc, listener_node.span()).into());
     }
@@ -157,28 +112,38 @@ fn extract_service(
 
     // Connectors
     //
-    let conn_node = required_child_doc(doc, node, "connectors")?;
-    let conns = data_nodes(doc, conn_node)?;
-    if conns.len() != 1 {
-        return Err(Bad::docspan("exactly one connector required", doc, conn_node.span()).into());
-    }
+    let conn_node = utils::required_child_doc(doc, node, "connectors")?;
+    let conns = utils::data_nodes(doc, conn_node)?;
     let mut conn_cfgs = vec![];
+    let mut load_balance: Option<UpstreamOptions> = None;
     for (node, name, args) in conns {
+        if name == "load-balance" {
+            if load_balance.is_some() {
+                panic!("Don't have two 'load-balance' sections");
+            }
+            load_balance = Some(extract_load_balance(doc, node)?);
+            continue;
+        }
         let conn = extract_connector(doc, node, name, args)?;
         conn_cfgs.push(conn);
+    }
+    if conn_cfgs.is_empty() {
+        return Err(
+            Bad::docspan("We require at least one connector", doc, conn_node.span()).into(),
+        );
     }
 
     // Path Control (optional)
     //
     let mut pc = PathControl::default();
-    if let Some(pc_node) = optional_child_doc(doc, node, "path-control") {
+    if let Some(pc_node) = utils::optional_child_doc(doc, node, "path-control") {
         // upstream-request (optional)
-        if let Some(ureq_node) = optional_child_doc(doc, pc_node, "upstream-request") {
+        if let Some(ureq_node) = utils::optional_child_doc(doc, pc_node, "upstream-request") {
             pc.upstream_request_filters = collect_filters(doc, ureq_node)?;
         }
 
         // upstream-response (optional)
-        if let Some(uresp_node) = optional_child_doc(doc, pc_node, "upstream-response") {
+        if let Some(uresp_node) = utils::optional_child_doc(doc, pc_node, "upstream-response") {
             pc.upstream_response_filters = collect_filters(doc, uresp_node)?
         }
     }
@@ -186,29 +151,106 @@ fn extract_service(
     Ok(ProxyConfig {
         name: name.to_string(),
         listeners: list_cfgs,
-        upstream: conn_cfgs.pop().unwrap(),
+        upstreams: conn_cfgs,
         path_control: pc,
+        upstream_options: load_balance.unwrap_or_default(),
     })
 }
 
-/// Useful for collecting all arguments as str:str key pairs
-fn str_str_args<'a>(
-    doc: &KdlDocument,
-    args: &'a [KdlEntry],
-) -> miette::Result<Vec<(&'a str, &'a str)>> {
-    let mut out = vec![];
-    for arg in args {
-        let name =
-            arg.name()
-                .map(|a| a.value())
-                .or_bail("arguments should be named", doc, arg.span())?;
-        let val =
-            arg.value()
-                .as_string()
-                .or_bail("arg values should be a string", doc, arg.span())?;
-        out.push((name, val));
+/// Extracts the `load-balance` structure from the `connectors` section
+fn extract_load_balance(doc: &KdlDocument, node: &KdlNode) -> miette::Result<UpstreamOptions> {
+    let items = utils::data_nodes(
+        doc,
+        node.children()
+            .or_bail("'load-balance' should have children", doc, node.span())?,
+    )?;
+
+    let mut selection: Option<SelectionKind> = None;
+    let mut health: Option<HealthCheckKind> = None;
+    let mut discover: Option<DiscoveryKind> = None;
+    let mut selector: RequestSelector = null_selector;
+
+    for (node, name, args) in items {
+        match name {
+            "selection" => {
+                let (sel, args) = utils::extract_one_str_arg_with_kv_args(
+                    doc,
+                    node,
+                    name,
+                    args,
+                    |val| match val {
+                        "RoundRobin" => Some(SelectionKind::RoundRobin),
+                        "Random" => Some(SelectionKind::Random),
+                        "FNV" => Some(SelectionKind::Fnv),
+                        "Ketama" => Some(SelectionKind::Ketama),
+                        _ => None,
+                    },
+                )?;
+                match sel {
+                    SelectionKind::RoundRobin | SelectionKind::Random => {
+                        // No key required, selection is random
+                    }
+                    SelectionKind::Fnv | SelectionKind::Ketama => {
+                        let sel_ty = args.get("key").or_bail(
+                            format!("selection {sel:?} requires a 'key' argument"),
+                            doc,
+                            node.span(),
+                        )?;
+
+                        selector = match sel_ty.as_str() {
+                            "UriPath" => uri_path_selector,
+                            "SourceAddrAndUriPath" => source_addr_and_uri_path_selector,
+                            other => {
+                                return Err(Bad::docspan(
+                                    format!("Unknown key: '{other}'"),
+                                    doc,
+                                    node.span(),
+                                )
+                                .into())
+                            }
+                        };
+                    }
+                }
+
+                selection = Some(sel);
+            }
+            "health-check" => {
+                health = Some(utils::extract_one_str_arg(
+                    doc,
+                    node,
+                    name,
+                    args,
+                    |val| match val {
+                        "None" => Some(HealthCheckKind::None),
+                        _ => None,
+                    },
+                )?);
+            }
+            "discovery" => {
+                discover = Some(utils::extract_one_str_arg(
+                    doc,
+                    node,
+                    name,
+                    args,
+                    |val| match val {
+                        "Static" => Some(DiscoveryKind::Static),
+                        _ => None,
+                    },
+                )?);
+            }
+            other => {
+                return Err(
+                    Bad::docspan(format!("Unknown setting: '{other}'"), doc, node.span()).into(),
+                );
+            }
+        }
     }
-    Ok(out)
+    Ok(UpstreamOptions {
+        selection: selection.unwrap_or(SelectionKind::RoundRobin),
+        selector,
+        health_checks: health.unwrap_or(HealthCheckKind::None),
+        discovery: discover.unwrap_or(DiscoveryKind::Static),
+    })
 }
 
 /// Extracts a single connector from the `connectors` section
@@ -222,7 +264,7 @@ fn extract_connector(
         return Err(Bad::docspan("Not a valid socket address", doc, node.span()).into());
     };
 
-    let args = str_str_args(doc, args)?;
+    let args = utils::str_str_args(doc, args)?;
     let (tls, sni) = match args.as_slice() {
         [] => (false, String::new()),
         [("tls-sni", sni)] => (true, sni.to_string()),
@@ -246,7 +288,7 @@ fn extract_listener(
     name: &str,
     args: &[KdlEntry],
 ) -> miette::Result<ListenerConfig> {
-    let mut args = str_str_args(doc, args)?;
+    let mut args = utils::str_str_args(doc, args)?;
     args.sort_by_key(|a| a.0);
 
     // Is this a bindable name?
@@ -293,7 +335,7 @@ fn extract_listener(
 // system { threads-per-service N }
 fn extract_threads_per_service(doc: &KdlDocument) -> miette::Result<usize> {
     let Some(tps) =
-        optional_child_doc(doc, doc, "system").and_then(|n| n.get("threads-per-service"))
+        utils::optional_child_doc(doc, doc, "system").and_then(|n| n.get("threads-per-service"))
     else {
         // Not present, go ahead and return the default
         return Ok(8);
@@ -361,6 +403,7 @@ impl<T> OptExtParse for Option<T> {
 }
 
 impl Bad {
+    /// Helper function for creating a miette span from a given error
     fn docspan(msg: impl Into<String>, doc: &KdlDocument, span: &SourceSpan) -> Self {
         Self {
             error: msg.into(),

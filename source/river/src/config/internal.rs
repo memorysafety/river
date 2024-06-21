@@ -13,6 +13,8 @@ use pingora::{
     upstreams::peer::HttpPeer,
 };
 
+use crate::proxy::request_selector::{null_selector, RequestSelector};
+
 /// River's internal configuration
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -62,7 +64,7 @@ impl Config {
 ///
 /// Note that we use `BTreeMap` and NOT `HashMap`, as we want to maintain the
 /// ordering from the configuration file.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct PathControl {
     pub(crate) upstream_request_filters: Vec<BTreeMap<String, String>>,
     pub(crate) upstream_response_filters: Vec<BTreeMap<String, String>>,
@@ -76,7 +78,8 @@ pub struct PathControl {
 pub struct ProxyConfig {
     pub(crate) name: String,
     pub(crate) listeners: Vec<ListenerConfig>,
-    pub(crate) upstream: HttpPeer,
+    pub(crate) upstream_options: UpstreamOptions,
+    pub(crate) upstreams: Vec<HttpPeer>,
     pub(crate) path_control: PathControl,
 }
 
@@ -98,6 +101,43 @@ pub enum ListenerKind {
         tls: Option<TlsConfig>,
     },
     Uds(PathBuf),
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct UpstreamOptions {
+    pub(crate) selection: SelectionKind,
+    pub(crate) selector: RequestSelector,
+    pub(crate) health_checks: HealthCheckKind,
+    pub(crate) discovery: DiscoveryKind,
+}
+
+impl Default for UpstreamOptions {
+    fn default() -> Self {
+        Self {
+            selection: SelectionKind::RoundRobin,
+            selector: null_selector,
+            health_checks: HealthCheckKind::None,
+            discovery: DiscoveryKind::Static,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum SelectionKind {
+    RoundRobin,
+    Random,
+    Fnv,
+    Ketama,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum HealthCheckKind {
+    None,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum DiscoveryKind {
+    Static,
 }
 
 //

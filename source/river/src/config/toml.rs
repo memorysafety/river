@@ -8,6 +8,8 @@ use std::{
 use pingora::upstreams::peer::HttpPeer;
 use serde::{Deserialize, Serialize};
 
+use super::internal::UpstreamOptions;
+
 /// Configuration used for TOML formatted files
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "kebab-case")]
@@ -148,8 +150,9 @@ impl From<ProxyConfig> for super::internal::ProxyConfig {
         Self {
             name: other.name,
             listeners: other.listeners.into_iter().map(Into::into).collect(),
-            upstream: other.connector.into(),
+            upstreams: vec![other.connector.into()],
             path_control: other.path_control.into(),
+            upstream_options: UpstreamOptions::default(),
         }
     }
 }
@@ -199,7 +202,8 @@ pub mod test {
     use pingora::upstreams::peer::HttpPeer;
 
     use crate::config::{
-        apply_toml, internal,
+        apply_toml,
+        internal::{self, UpstreamOptions},
         toml::{ConnectorConfig, ListenerConfig, ProxyConfig, System},
     };
 
@@ -326,11 +330,11 @@ pub mod test {
                             },
                         },
                     ],
-                    upstream: HttpPeer::new(
+                    upstreams: vec![HttpPeer::new(
                         "91.107.223.4:443",
                         true,
                         String::from("onevariable.com"),
-                    ),
+                    )],
                     path_control: internal::PathControl {
                         upstream_request_filters: vec![
                             BTreeMap::from([
@@ -355,6 +359,7 @@ pub mod test {
                             ]),
                         ],
                     },
+                    upstream_options: UpstreamOptions::default(),
                 },
                 internal::ProxyConfig {
                     name: "Example2".into(),
@@ -364,11 +369,12 @@ pub mod test {
                             tls: None,
                         },
                     }],
-                    upstream: HttpPeer::new("91.107.223.4:80", false, String::new()),
+                    upstreams: vec![HttpPeer::new("91.107.223.4:80", false, String::new())],
                     path_control: internal::PathControl {
                         upstream_request_filters: vec![],
                         upstream_response_filters: vec![],
                     },
+                    upstream_options: UpstreamOptions::default(),
                 },
             ],
         };
