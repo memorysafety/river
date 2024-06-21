@@ -1,9 +1,9 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, net::SocketAddr};
 
 use pingora::upstreams::peer::HttpPeer;
 
 use crate::{
-    config::internal::{ListenerConfig, ProxyConfig, UpstreamOptions},
+    config::internal::{ListenerConfig, ListenerKind, ProxyConfig, UpstreamOptions},
     proxy::request_selector::uri_path_selector,
 };
 
@@ -120,4 +120,70 @@ fn load_test() {
             });
         assert_eq!(*path_control, ebp.path_control);
     }
+}
+
+/// Empty: not allowed
+const EMPTY_TEST: &str = "
+";
+
+#[test]
+fn empty() {
+    let doc: ::kdl::KdlDocument = EMPTY_TEST.parse().unwrap_or_else(|e| {
+        panic!("Error parsing KDL file: {e:?}");
+    });
+    let val: Result<crate::config::internal::Config, _> = doc.try_into();
+    assert!(val.is_err());
+}
+
+/// Empty services: not allowed
+const SERVICES_EMPTY_TEST: &str = "
+    services {
+
+    }
+";
+
+#[test]
+fn services_empty() {
+    let doc: ::kdl::KdlDocument = SERVICES_EMPTY_TEST.parse().unwrap_or_else(|e| {
+        panic!("Error parsing KDL file: {e:?}");
+    });
+    let val: Result<crate::config::internal::Config, _> = doc.try_into();
+    assert!(val.is_err());
+}
+
+/// The most minimal config is single services block
+const ONE_SERVICE_TEST: &str = r#"
+services {
+    Example {
+        listeners {
+            "127.0.0.1:80"
+        }
+        connectors {
+            "127.0.0.1:8000"
+        }
+    }
+}
+"#;
+
+#[test]
+fn one_service() {
+    let doc: ::kdl::KdlDocument = ONE_SERVICE_TEST.parse().unwrap_or_else(|e| {
+        panic!("Error parsing KDL file: {e:?}");
+    });
+    let val: crate::config::internal::Config = doc.try_into().unwrap_or_else(|e| {
+        panic!("Error rendering config from KDL file: {e:?}");
+    });
+    assert_eq!(val.basic_proxies.len(), 1);
+    assert_eq!(val.basic_proxies[0].listeners.len(), 1);
+    assert_eq!(
+        val.basic_proxies[0].listeners[0].source,
+        ListenerKind::Tcp {
+            addr: "127.0.0.1:80".into(),
+            tls: None
+        }
+    );
+    assert_eq!(
+        val.basic_proxies[0].upstreams[0]._address,
+        ("127.0.0.1:8000".parse::<SocketAddr>().unwrap()).into()
+    );
 }

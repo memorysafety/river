@@ -43,6 +43,11 @@ fn extract_services(doc: &KdlDocument) -> miette::Result<Vec<ProxyConfig>> {
     for (name, service) in services {
         proxies.push(extract_service(doc, name, service)?);
     }
+
+    if proxies.is_empty() {
+        return Err(Bad::docspan("No services defined", doc, service_node.span()).into());
+    }
+
     Ok(proxies)
 }
 
@@ -121,6 +126,11 @@ fn extract_service(
         }
         let conn = extract_connector(doc, node, name, args)?;
         conn_cfgs.push(conn);
+    }
+    if conn_cfgs.is_empty() {
+        return Err(
+            Bad::docspan("We require at least one connector", doc, conn_node.span()).into(),
+        );
     }
 
     // Path Control (optional)

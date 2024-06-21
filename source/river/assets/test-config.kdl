@@ -1,15 +1,27 @@
+// System configuration items - applies to the entire application
 system {
     threads-per-service 8
 }
 
+// Services are the main abstraction of River
 services {
+    // This is a service named "Example1"
     Example1 {
+        // Listeners are the "downstream" interfaces that we listen to. We can name as many
+        // as we'd like, at least one is required
         listeners {
             "0.0.0.0:8080"
             "0.0.0.0:4443" cert-path="./assets/test.crt" key-path="./assets/test.key"
         }
 
+        // Connectors are the "upstream" interfaces that we connect with. We can name as many
+        // as we'd like, at least one is required. By default, connectors are distributed
+        // round-robin.
         connectors {
+            // load-balance configures how we handle distributing between the named connectors.
+            // This example is a little silly, because we only have one connector.
+            //
+            // This section is optional.
             load-balance {
                 selection "Ketama" key="UriPath"
                 discovery "Static"
@@ -18,6 +30,9 @@ services {
             "91.107.223.4:443" tls-sni="onevariable.com"
         }
 
+        // Path control are optional modifiers for requests and responses
+        //
+        // This section is optional.
         path-control {
             upstream-request {
                 filter kind="remove-header-key-regex" pattern=".*(secret|SECRET).*"
@@ -30,6 +45,8 @@ services {
         }
     }
 
+    // This is a second service named "Example2". This is the minimal possible configuration,
+    // with a single listener and connector.
     Example2 {
         listeners {
             "0.0.0.0:8000"
