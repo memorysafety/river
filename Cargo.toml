@@ -24,3 +24,28 @@ install-updater = false
 [profile.dist]
 inherits = "release"
 lto = "thin"
+
+[patch.crates-io.pingora-load-balancing]
+git = "https://github.com/memorysafety/pingora.git"
+rev = "12ca93c6b187a68ff9a526b4c4e669f602244366"
+# path = "../pingora/pingora-load-balancing"
+
+[patch.crates-io.pingora-core]
+git = "https://github.com/memorysafety/pingora.git"
+rev = "12ca93c6b187a68ff9a526b4c4e669f602244366"
+# path = "../pingora/pingora-core"
+
+[patch.crates-io.pingora-cache]
+git = "https://github.com/memorysafety/pingora.git"
+rev = "12ca93c6b187a68ff9a526b4c4e669f602244366"
+# path = "../pingora/pingora-cache"
+
+[patch.crates-io.pingora-http]
+git = "https://github.com/memorysafety/pingora.git"
+rev = "12ca93c6b187a68ff9a526b4c4e669f602244366"
+# path = "../pingora/pingora-http"
+
+[patch.crates-io.pingora-proxy]
+git = "https://github.com/memorysafety/pingora.git"
+rev = "12ca93c6b187a68ff9a526b4c4e669f602244366"
+# path = "../pingora/pingora-proxy"

@@ -30,6 +30,12 @@ pub mod request_modifiers;
 pub mod request_selector;
 pub mod response_modifiers;
 
+#[derive(Clone, Hash, PartialEq, Eq)]
+pub struct BonusData {
+    // todo: what else do we need here?
+    peer: HttpPeer,
+}
+
 /// The [RiverProxyService] is intended to capture the behaviors used to extend
 /// the [HttpProxy] functionality by providing a [ProxyHttp] trait implementation.
 ///
@@ -41,7 +47,7 @@ pub struct RiverProxyService<BS: BackendSelection> {
     /// All modifiers used when implementing the [ProxyHttp] trait.
     pub modifiers: Modifiers,
     /// Load Balancer
-    pub load_balancer: LoadBalancer<BS>,
+    pub load_balancer: LoadBalancer<BS, BonusData>,
     pub request_selector: RequestSelector,
 }
 
@@ -55,18 +61,18 @@ pub fn river_proxy_service(
     type ServiceMaker = fn(ProxyConfig, &Server) -> Box<dyn pingora::services::Service>;
 
     let service_maker: ServiceMaker = match conf.upstream_options.selection {
-        SelectionKind::RoundRobin => RiverProxyService::<RoundRobin>::from_basic_conf,
-        SelectionKind::Random => RiverProxyService::<Random>::from_basic_conf,
-        SelectionKind::Fnv => RiverProxyService::<FVNHash>::from_basic_conf,
-        SelectionKind::Ketama => RiverProxyService::<KetamaHashing>::from_basic_conf,
+        SelectionKind::RoundRobin => RiverProxyService::<RoundRobin<BonusData>>::from_basic_conf,
+        SelectionKind::Random => RiverProxyService::<Random<BonusData>>::from_basic_conf,
+        SelectionKind::Fnv => RiverProxyService::<FVNHash<BonusData>>::from_basic_conf,
+        SelectionKind::Ketama => RiverProxyService::<KetamaHashing<BonusData>>::from_basic_conf,
     };
     service_maker(conf, server)
 }
 
 impl<BS> RiverProxyService<BS>
 where
-    BS: BackendSelection + Send + Sync + 'static,
-    BS::Iter: BackendIter,
+    BS: BackendSelection<Metadata = BonusData> + Send + Sync + 'static,
+    BS::Iter: BackendIter<Metadata = BonusData>,
 {
     /// Create a new [RiverProxyService] from the given [ProxyConfig]
     pub fn from_basic_conf(
@@ -75,9 +81,12 @@ where
     ) -> Box<dyn pingora::services::Service> {
         let modifiers = Modifiers::from_conf(&conf.path_control).unwrap();
 
-        let upstreams =
-            LoadBalancer::<BS>::try_from_iter(conf.upstreams.iter().map(|u| u._address.clone()))
-                .unwrap();
+        let upstreams = LoadBalancer::<BS, BonusData>::try_from_iter(
+            conf.upstreams
+                .iter()
+                .map(|u| (u._address.clone(), BonusData { peer: u.clone() })),
+        )
+        .unwrap();
 
         let mut my_proxy = pingora_proxy::http_proxy_service_with_name(
             &server.configuration,
@@ -208,8 +217,8 @@ pub struct RiverContext {
 #[async_trait]
 impl<BS> ProxyHttp for RiverProxyService<BS>
 where
-    BS: BackendSelection + Send + Sync + 'static,
-    BS::Iter: BackendIter,
+    BS: BackendSelection<Metadata = BonusData> + Send + Sync + 'static,
+    BS::Iter: BackendIter<Metadata = BonusData>,
 {
     type CTX = RiverContext;
 
@@ -237,8 +246,8 @@ where
 
         let backend = backend.ok_or_else(|| pingora::Error::new_str("oops"))?;
 
-        // For now, we only support one upstream
-        Ok(Box::new(HttpPeer::new(backend, true, "wrong".to_string())))
+        // Retrieve the HttpPeer from the associated backend metadata
+        Ok(Box::new(backend.metadata.peer.clone()))
     }
 
     /// Handle the "upstream request filter" phase, where we can choose to make
