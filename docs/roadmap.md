@@ -6,7 +6,6 @@
 
 This work took place over the course of April 2024. The goals of this milestone were:
 
-
 1. Getting the river application up and running as a Linux binary
 2. Getting enough configuration options working to allow for basic operation
 3. Integrating the pingora library and getting basic reverse proxy operation working
@@ -59,11 +58,25 @@ towards a stable 1.0 release.
 
 ### "ACME features" / v0.6.x
 
-This future work is focused on implementing ACME protocol support, to enable automatically obtaining
+#### Summary
+
+This future work is focused on implementing [ACME] protocol support, to enable automatically obtaining
 and/or renewing TLS certificates from providers such as Lets Encrypt. This feature is expected to
 work without active human interaction.
 
-Requirements for this stage include:
+[ACME]: https://datatracker.ietf.org/doc/html/rfc8555/
+
+#### Reasons for Prioritization
+
+Support for automated ACME protocol support allows users to deploy with full TLS support, an expected
+feature for modern deployments. Older standards in this space to not support this feature, requiring
+the installation of third party plugins or additional deployment setup to provision Reverse Proxy
+servers.
+
+This feature has been highly requested, and has been prioritized as an example of "user and operator
+friendly" feature support.
+
+#### Requirements/Features to Implement:
 
 1. The application MUST support the use of the Automatic Certificate Management Environment (ACME)
    protocol to obtain new TLS certificates.
@@ -74,16 +87,28 @@ Requirements for this stage include:
 5. The application MUST support configuration of certificate renewal interval, from either:
     1. The number of days since the certificate was acquired
     2. The number of days until the certificate will expired
-6. The application MUST support API Version 2 of the ACME protocol
-7. The application MAY support API Version 1 of the ACME protocol
+6. The application MUST support RFC 8555, e.g. "Let's Encrypt ACMEv2"
 
 ### "Full Service-Discovery Features" / v0.7.x
+
+#### Summary
 
 The work in "Spike 2.1" introduced basic scaffolding for service discovery, but did not
 support any "active" service discovery features outside of a static list provided on
 start-up.
 
-This work is focused on supporting a number of useful service discovery features, including:
+#### Reasons for Prioritization
+
+For production users with automated and/or continuous deployment environments, it is common that
+back-end or API component servers are likely to be deployed more often than the Reverse Proxy server
+would be. In order to support seamless hand-off between "old" and "new" deployments, the ability to
+discover new back-end servers, and retire old back-end servers is necessary.
+
+Additionally, support for Service Discovery features also allows for simplified Reverse Proxy
+configuration: It is not necessary to configure River with all potential servers at starting time,
+eliding this to be detected at runtime.
+
+#### Requirements/Features to Implement:
 
 1. River MUST support the use of DNS-Service Discovery to provide a list of upstream servers for a
    given service
@@ -99,6 +124,8 @@ This work is focused on supporting a number of useful service discovery features
 
 ### "Full Path Control Features" / v0.8.x
 
+#### Summary
+
 Spike 1 introduced initial Path Control features, allowing for filtering or modification of
 requests and responses.
 
@@ -108,6 +135,21 @@ Denial of Service attacks, or general overload.
 
 Additionally, there is intent to implement default-enabled normalization modifications and
 checks, intended to prevent against common attack vectors or programmer errors.
+
+#### Reasons for Prioritization
+
+Many features of a reverse proxy are regarding what kind of connections the proxy facilitates.
+However in many cases, it is also just as important to be able to determine what kind of
+connections should be **rejected**, both for security reasons, as well as prevention of
+overload of upstream servers, which can result in Denial Of Service conditions.
+
+The ability to quickly and efficiently deny unwanted traffic is an important feature to
+enable real-world production usage of River.
+
+#### Requirements/Features to Implement:
+
+The full list of necessary filtering and modification configuration items has not yet been
+enumerated.
 
 ### Polish, packaging, and pre-release / v0.9.x+
 
