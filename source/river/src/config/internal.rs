@@ -21,6 +21,7 @@ pub struct Config {
     pub validate_configs: bool,
     pub threads_per_service: usize,
     pub basic_proxies: Vec<ProxyConfig>,
+    pub file_servers: Vec<FileServerConfig>,
 }
 
 impl Config {
@@ -68,6 +69,16 @@ impl Config {
 pub struct PathControl {
     pub(crate) upstream_request_filters: Vec<BTreeMap<String, String>>,
     pub(crate) upstream_response_filters: Vec<BTreeMap<String, String>>,
+}
+
+//
+// File Server Configuration
+//
+#[derive(Debug, Clone)]
+pub struct FileServerConfig {
+    pub(crate) name: String,
+    pub(crate) listeners: Vec<ListenerConfig>,
+    pub(crate) base_path: Option<PathBuf>,
 }
 
 //
@@ -150,6 +161,7 @@ impl Default for Config {
             validate_configs: false,
             threads_per_service: 8,
             basic_proxies: vec![],
+            file_servers: vec![],
         }
     }
 }

@@ -32,6 +32,13 @@ tracing = "0.1.40"
 kdl = "4.6.0"
 miette = { version = "5.10.0", features = ["fancy"] }
 thiserror = "1.0.61"
+http = "1.0.0"
+
+[dependencies.static-files-module]
+path = "../../../pandora-web-server/static-files-module"
+
+[dependencies.pandora-module-utils]
+path = "../../../pandora-web-server/pandora-module-utils"
 
 [dependencies.tracing-subscriber]
 version  = "0.3.18"

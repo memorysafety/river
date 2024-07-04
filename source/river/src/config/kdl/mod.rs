@@ -1,4 +1,8 @@
-use std::{collections::BTreeMap, net::SocketAddr, path::PathBuf};
+use std::{
+    collections::{BTreeMap, HashMap, HashSet},
+    net::SocketAddr,
+    path::PathBuf,
+};
 
 use kdl::{KdlDocument, KdlEntry, KdlNode};
 use miette::{bail, Diagnostic, SourceSpan};
@@ -6,8 +10,8 @@ use pingora::upstreams::peer::HttpPeer;
 
 use crate::{
     config::internal::{
-        Config, DiscoveryKind, HealthCheckKind, ListenerConfig, ListenerKind, PathControl,
-        ProxyConfig, SelectionKind, TlsConfig, UpstreamOptions,
+        Config, DiscoveryKind, FileServerConfig, HealthCheckKind, ListenerConfig, ListenerKind,
+        PathControl, ProxyConfig, SelectionKind, TlsConfig, UpstreamOptions,
     },
     proxy::request_selector::{
         null_selector, source_addr_and_uri_path_selector, uri_path_selector, RequestSelector,
@@ -24,31 +28,86 @@ impl TryFrom<KdlDocument> for Config {
 
     fn try_from(value: KdlDocument) -> Result<Self, Self::Error> {
         let threads_per_service = extract_threads_per_service(&value)?;
-        let basic_proxies = extract_services(&value)?;
+        let (basic_proxies, file_servers) = extract_services(&value)?;
 
         Ok(Config {
             threads_per_service,
             basic_proxies,
+            file_servers,
             ..Config::default()
         })
     }
 }
 
 /// Extract all services from the top level document
-fn extract_services(doc: &KdlDocument) -> miette::Result<Vec<ProxyConfig>> {
+fn extract_services(
+    doc: &KdlDocument,
+) -> miette::Result<(Vec<ProxyConfig>, Vec<FileServerConfig>)> {
     let service_node = utils::required_child_doc(doc, doc, "services")?;
     let services = utils::wildcard_argless_child_docs(doc, service_node)?;
 
+    let proxy_node_set = HashSet::from(["listeners", "connectors", "path-control"]);
+    let file_server_node_set = HashSet::from(["listeners", "file-server"]);
+
     let mut proxies = vec![];
+    let mut file_servers = vec![];
+
     for (name, service) in services {
-        proxies.push(extract_service(doc, name, service)?);
+        // First, visit all of the children nodes, and make sure each child
+        // node only appears once. This is used to detect duplicate sections
+        let mut fingerprint_set: HashSet<&str> = HashSet::new();
+        for ch in service.nodes() {
+            let name = ch.name().value();
+            let dupe = !fingerprint_set.insert(name);
+            if dupe {
+                return Err(
+                    Bad::docspan(format!("Duplicate section: '{name}'!"), doc, ch.span()).into(),
+                );
+            }
+        }
+
+        // Now: what do we do with this node?
+        if fingerprint_set.is_subset(&proxy_node_set) {
+            // If the contained nodes are a strict subset of proxy node config fields,
+            // then treat this section as a proxy node
+            proxies.push(extract_service(doc, name, service)?);
+        } else if fingerprint_set.is_subset(&file_server_node_set) {
+            // If the contained nodes are a strict subset of the file server config
+            // fields, then treat this section as a file server node
+            file_servers.push(extract_file_server(doc, name, service)?);
+        } else {
+            // Otherwise, we're not sure what this node is supposed to be!
+            //
+            // Obtain the superset of ALL potential nodes, which is essentially
+            // our configuration grammar.
+            let superset: HashSet<&str> = proxy_node_set
+                .union(&file_server_node_set)
+                .cloned()
+                .collect();
+
+            // Then figure out what fields our fingerprint set contains that
+            // is "novel", or basically fields we don't know about
+            let what = fingerprint_set
+                .difference(&superset)
+                .copied()
+                .collect::<Vec<&str>>()
+                .join(", ");
+
+            // Then inform the user about the reason for our discontent
+            return Err(Bad::docspan(
+                format!("Unknown configuration section(s): {what}"),
+                doc,
+                service.span(),
+            )
+            .into());
+        }
     }
 
-    if proxies.is_empty() {
+    if proxies.is_empty() && file_servers.is_empty() {
         return Err(Bad::docspan("No services defined", doc, service_node.span()).into());
     }
 
-    Ok(proxies)
+    Ok((proxies, file_servers))
 }
 
 /// Collects all the filters, where the node name must be "filter", and the rest of the args
@@ -89,6 +148,49 @@ fn collect_filters(
         );
     }
     Ok(fout)
+}
+
+/// Extracts a single file server from the `services` block
+fn extract_file_server(
+    doc: &KdlDocument,
+    name: &str,
+    node: &KdlDocument,
+) -> miette::Result<FileServerConfig> {
+    // Listeners
+    //
+    let listener_node = utils::required_child_doc(doc, node, "listeners")?;
+    let listeners = utils::data_nodes(doc, listener_node)?;
+    if listeners.is_empty() {
+        return Err(Bad::docspan("nonzero listeners required", doc, listener_node.span()).into());
+    }
+    let mut list_cfgs = vec![];
+    for (node, name, args) in listeners {
+        let listener = extract_listener(doc, node, name, args)?;
+        list_cfgs.push(listener);
+    }
+
+    // Base Path
+    //
+    let fs_node = utils::required_child_doc(doc, node, "file-server")?;
+    let data_nodes = utils::data_nodes(doc, fs_node)?;
+    let mut map = HashMap::new();
+    for (node, name, args) in data_nodes {
+        map.insert(name, (node, args));
+    }
+
+    let base_path = if let Some((bpnode, bpargs)) = map.get("base-path") {
+        let val =
+            utils::extract_one_str_arg(doc, bpnode, "base-path", bpargs, |a| Some(a.to_string()))?;
+        Some(val.into())
+    } else {
+        None
+    };
+
+    Ok(FileServerConfig {
+        name: name.to_string(),
+        listeners: list_cfgs,
+        base_path,
+    })
 }
 
 /// Extracts a single service from the `services` block

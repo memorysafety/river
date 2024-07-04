@@ -55,4 +55,13 @@ services {
             "91.107.223.4:80"
         }
     }
+
+    Example3 {
+        listeners {
+            "0.0.0.0:9000"
+        }
+        file-server {
+            base-path "."
+        }
+    }
 }
