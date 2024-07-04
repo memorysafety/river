@@ -1,6 +1,8 @@
 use std::ops::{Deref, DerefMut};
 
-use pandora_module_utils::{pingora::SessionWrapper, OneOrMany, RequestFilter, RequestFilterResult};
+use pandora_module_utils::{
+    pingora::SessionWrapper, OneOrMany, RequestFilter, RequestFilterResult,
+};
 use pingora::{server::Server, upstreams::peer::HttpPeer};
 use pingora_core::Result;
 use pingora_proxy::{ProxyHttp, Session};
@@ -22,11 +24,8 @@ pub fn river_file_server(
     let file_server = FileServer {
         server: StaticFilesHandler::try_from(fsconf).unwrap(),
     };
-    let mut my_proxy = pingora_proxy::http_proxy_service_with_name(
-        &server.configuration,
-        file_server,
-        &conf.name,
-    );
+    let mut my_proxy =
+        pingora_proxy::http_proxy_service_with_name(&server.configuration, file_server, &conf.name);
 
     populate_listners(conf.listeners, &mut my_proxy);
 
@@ -90,12 +89,8 @@ impl ProxyHttp for FileServer {
         };
         match self.server.request_filter(&mut wrap, &mut ()).await? {
             RequestFilterResult::ResponseSent => Ok(true),
-            RequestFilterResult::Handled => {
-                Err(pingora_core::Error::new_str("Request Failed2"))
-            },
-            RequestFilterResult::Unhandled => {
-                Err(pingora_core::Error::new_str("Request Failed3"))
-            }
+            RequestFilterResult::Handled => Err(pingora_core::Error::new_str("Request Failed2")),
+            RequestFilterResult::Unhandled => Err(pingora_core::Error::new_str("Request Failed3")),
         }
     }
 }

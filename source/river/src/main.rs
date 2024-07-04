@@ -1,7 +1,6 @@
 mod config;
-mod proxy;
 mod files;
-
+mod proxy;
 
 use crate::{files::river_file_server, proxy::river_proxy_service};
 use config::internal::{ListenerConfig, ListenerKind};
@@ -50,8 +49,10 @@ fn main() {
     my_server.run_forever();
 }
 
-
-pub fn populate_listners<T>(listeners: Vec<ListenerConfig>, service: &mut pingora_core::services::listening::Service<T>) {
+pub fn populate_listners<T>(
+    listeners: Vec<ListenerConfig>,
+    service: &mut pingora_core::services::listening::Service<T>,
+) {
     for list_cfg in listeners {
         // NOTE: See https://github.com/cloudflare/pingora/issues/182 for tracking "paths aren't
         // always UTF-8 strings".
