@@ -35,10 +35,10 @@ thiserror = "1.0.61"
 http = "1.0.0"
 
 [dependencies.static-files-module]
-path = "../../../pandora-web-server/static-files-module"
+version = "0.2"
 
 [dependencies.pandora-module-utils]
-path = "../../../pandora-web-server/pandora-module-utils"
+version = "0.2"
 
 [dependencies.tracing-subscriber]
 version  = "0.3.18"
