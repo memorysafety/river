@@ -377,6 +377,7 @@ pub mod test {
                     upstream_options: UpstreamOptions::default(),
                 },
             ],
+            file_servers: Vec::new(),
         };
 
         let mut cfg = internal::Config::default();

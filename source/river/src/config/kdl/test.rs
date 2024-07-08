@@ -3,7 +3,9 @@ use std::{collections::BTreeMap, net::SocketAddr};
 use pingora::upstreams::peer::HttpPeer;
 
 use crate::{
-    config::internal::{ListenerConfig, ListenerKind, ProxyConfig, UpstreamOptions},
+    config::internal::{
+        FileServerConfig, ListenerConfig, ListenerKind, ProxyConfig, UpstreamOptions,
+    },
     proxy::request_selector::uri_path_selector,
 };
 
@@ -93,11 +95,33 @@ fn load_test() {
                 upstream_options: UpstreamOptions::default(),
             },
         ],
+        file_servers: vec![FileServerConfig {
+            name: "Example3".into(),
+            listeners: vec![
+                ListenerConfig {
+                    source: crate::config::internal::ListenerKind::Tcp {
+                        addr: "0.0.0.0:9000".into(),
+                        tls: None,
+                    },
+                },
+                ListenerConfig {
+                    source: crate::config::internal::ListenerKind::Tcp {
+                        addr: "0.0.0.0:9443".into(),
+                        tls: Some(crate::config::internal::TlsConfig {
+                            cert_path: "./assets/test.crt".into(),
+                            key_path: "./assets/test.key".into(),
+                        }),
+                    },
+                },
+            ],
+            base_path: Some(".".into()),
+        }],
     };
 
     assert_eq!(val.validate_configs, expected.validate_configs);
     assert_eq!(val.threads_per_service, expected.threads_per_service);
     assert_eq!(val.basic_proxies.len(), expected.basic_proxies.len());
+    assert_eq!(val.file_servers.len(), expected.file_servers.len());
 
     for (abp, ebp) in val.basic_proxies.iter().zip(expected.basic_proxies.iter()) {
         let ProxyConfig {
@@ -119,6 +143,17 @@ fn load_test() {
                 assert_eq!(a.sni, e.sni);
             });
         assert_eq!(*path_control, ebp.path_control);
+    }
+
+    for (afs, efs) in val.file_servers.iter().zip(expected.file_servers.iter()) {
+        let FileServerConfig {
+            name,
+            listeners,
+            base_path,
+        } = afs;
+        assert_eq!(*name, efs.name);
+        assert_eq!(*listeners, efs.listeners);
+        assert_eq!(*base_path, efs.base_path);
     }
 }
 
