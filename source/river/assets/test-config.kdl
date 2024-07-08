@@ -56,12 +56,19 @@ services {
         }
     }
 
+    // This is a third service, this one is a file server
     Example3 {
+        // Same as proxy services, we support multiple listeners, and require
+        // at least one.
         listeners {
             "0.0.0.0:9000"
             "0.0.0.0:9443" cert-path="./assets/test.crt" key-path="./assets/test.key"
         }
+        // File servers have additional configuration items
         file-server {
+            // The base path is what will be used as the "root" of the file server
+            //
+            // All files within the root will be available
             base-path "."
         }
     }
