@@ -20,11 +20,13 @@ use pingora_load_balancing::{
 use pingora_proxy::{ProxyHttp, Session};
 
 use crate::{
-    config::internal::{ListenerKind, PathControl, ProxyConfig, SelectionKind},
-    proxy::request_modifiers::RequestModifyMod,
+    config::internal::{PathControl, ProxyConfig, SelectionKind},
+    populate_listners,
+    proxy::{
+        request_modifiers::RequestModifyMod, request_selector::RequestSelector,
+        response_modifiers::ResponseModifyMod,
+    },
 };
-
-use self::{request_selector::RequestSelector, response_modifiers::ResponseModifyMod};
 
 pub mod request_modifiers;
 pub mod request_selector;
@@ -98,35 +100,7 @@ where
             &conf.name,
         );
 
-        for list_cfg in conf.listeners {
-            // NOTE: See https://github.com/cloudflare/pingora/issues/182 for tracking "paths aren't
-            // always UTF-8 strings".
-            //
-            // See also https://github.com/cloudflare/pingora/issues/183 for tracking "ip addrs shouldn't
-            // be strings"
-            match list_cfg.source {
-                ListenerKind::Tcp {
-                    addr,
-                    tls: Some(tls_cfg),
-                } => {
-                    let cert_path = tls_cfg
-                        .cert_path
-                        .to_str()
-                        .expect("cert path should be utf8");
-                    let key_path = tls_cfg.key_path.to_str().expect("key path should be utf8");
-                    my_proxy
-                        .add_tls(&addr, cert_path, key_path)
-                        .expect("adding TLS listener shouldn't fail");
-                }
-                ListenerKind::Tcp { addr, tls: None } => {
-                    my_proxy.add_tcp(&addr);
-                }
-                ListenerKind::Uds(path) => {
-                    let path = path.to_str().unwrap();
-                    my_proxy.add_uds(path, None); // todo
-                }
-            }
-        }
+        populate_listners(conf.listeners, &mut my_proxy);
 
         Box::new(my_proxy)
     }
