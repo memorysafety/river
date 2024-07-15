@@ -8,13 +8,13 @@ system {
 
     // Path to the pidfile used when daemonizing
     //
-    // NOTE: This has issues if you use relative paths. See issue TODO
+    // NOTE: This has issues if you use relative paths. See issue https://github.com/memorysafety/river/issues/50
     pid-file "/tmp/river.pidfile"
 
     // Path to upgrade socket
     //
     // NOTE: `upgrade` is NOT exposed in the config file, it MUST be set on the CLI
-    // NOTE: This has issues if you use relative paths. See issue TODO
+    // NOTE: This has issues if you use relative paths. See issue https://github.com/memorysafety/river/issues/50
     // NOTE: The upgrade command is only supported on Linux
     upgrade-socket "/tmp/river-upgrade.sock"
 }
