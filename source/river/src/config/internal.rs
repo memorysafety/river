@@ -20,6 +20,10 @@ use crate::proxy::request_selector::{null_selector, RequestSelector};
 pub struct Config {
     pub validate_configs: bool,
     pub threads_per_service: usize,
+    pub daemonize: bool,
+    pub pid_file: Option<PathBuf>,
+    pub upgrade_socket: Option<PathBuf>,
+    pub upgrade: bool,
     pub basic_proxies: Vec<ProxyConfig>,
     pub file_servers: Vec<FileServerConfig>,
 }
@@ -29,8 +33,8 @@ impl Config {
     pub fn pingora_opt(&self) -> PingoraOpt {
         // TODO
         PingoraOpt {
-            upgrade: false,
-            daemon: false,
+            upgrade: self.upgrade,
+            daemon: self.daemonize,
             nocapture: false,
             test: self.validate_configs,
             conf: None,
@@ -40,13 +44,25 @@ impl Config {
     /// Get the [`ServerConf`][PingoraServerConf] field for Pingora
     pub fn pingora_server_conf(&self) -> PingoraServerConf {
         PingoraServerConf {
-            daemon: false,
+            daemon: self.daemonize,
             error_log: None,
             // TODO: These are bad assumptions - non-developers will not have "target"
             // files, and we shouldn't necessarily use utf-8 strings with fixed separators
             // here.
-            pid_file: String::from("./target/pidfile"),
-            upgrade_sock: String::from("./target/upgrade"),
+            pid_file: self
+                .pid_file
+                .as_ref()
+                .cloned()
+                .unwrap_or_else(|| PathBuf::from("river.pidfile"))
+                .to_string_lossy()
+                .into(),
+            upgrade_sock: self
+                .upgrade_socket
+                .as_ref()
+                .cloned()
+                .unwrap_or_else(|| PathBuf::from("river-upgrade.sock"))
+                .to_string_lossy()
+                .into(),
             user: None,
             group: None,
             threads: self.threads_per_service,
@@ -58,6 +74,22 @@ impl Config {
 
     pub fn validate(&self) {
         // TODO: validation logic
+        if self.daemonize {
+            assert!(
+                self.pid_file.is_some(),
+                "Daemonize commanded but no pid file set!"
+            );
+        }
+        if self.upgrade {
+            assert!(
+                cfg!(target_os = "linux"),
+                "Upgrade is only supported on linux!"
+            );
+            assert!(
+                self.upgrade_socket.is_some(),
+                "Upgrade commanded but no upgrade socket set!"
+            );
+        }
     }
 }
 
@@ -162,6 +194,10 @@ impl Default for Config {
             threads_per_service: 8,
             basic_proxies: vec![],
             file_servers: vec![],
+            daemonize: false,
+            pid_file: None,
+            upgrade: false,
+            upgrade_socket: None,
         }
     }
 }

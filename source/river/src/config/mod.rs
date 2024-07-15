@@ -68,6 +68,9 @@ pub fn render_config() -> internal::Config {
     apply_cli(&mut config, &c);
 
     tracing::info!(?config, "Full configuration",);
+    tracing::info!("Validating...");
+    config.validate();
+    tracing::info!("Validation complete");
     config
 }
 
@@ -77,9 +80,38 @@ fn apply_cli(conf: &mut internal::Config, cli: &Cli) {
         threads_per_service,
         config_toml: _,
         config_kdl: _,
+        daemonize,
+        upgrade,
+        pidfile,
+        upgrade_socket,
     } = cli;
 
     conf.validate_configs |= validate_configs;
+    conf.daemonize |= daemonize;
+    conf.upgrade |= upgrade;
+
+    if let Some(pidfile) = pidfile {
+        if let Some(current_pidfile) = conf.pid_file.as_ref() {
+            if pidfile != current_pidfile {
+                panic!(
+                    "Mismatched commanded PID files. CLI: {pidfile:?}, Config: {current_pidfile:?}"
+                );
+            }
+        }
+        conf.pid_file = Some(pidfile.into());
+    }
+
+    if let Some(upgrade_socket) = upgrade_socket {
+        if let Some(current_upgrade_socket) = conf.upgrade_socket.as_ref() {
+            if upgrade_socket != current_upgrade_socket {
+                panic!(
+                    "Mismatched commanded upgrade sockets. CLI: {upgrade_socket:?}, Config: {current_upgrade_socket:?}"
+                );
+            }
+        }
+        conf.upgrade_socket = Some(upgrade_socket.into());
+    }
+
     if let Some(tps) = threads_per_service {
         conf.threads_per_service = *tps;
     }

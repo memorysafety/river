@@ -1,6 +1,22 @@
 // System configuration items - applies to the entire application
 system {
     threads-per-service 8
+    // Should the server daemonize and run in the background?
+    //
+    // NOTE: If this is "true", then "pid-file" must be set
+    daemonize false
+
+    // Path to the pidfile used when daemonizing
+    //
+    // NOTE: This has issues if you use relative paths. See issue TODO
+    pid-file "/tmp/river.pidfile"
+
+    // Path to upgrade socket
+    //
+    // NOTE: `upgrade` is NOT exposed in the config file, it MUST be set on the CLI
+    // NOTE: This has issues if you use relative paths. See issue TODO
+    // NOTE: The upgrade command is only supported on Linux
+    upgrade-socket "/tmp/river-upgrade.sock"
 }
 
 // Services are the main abstraction of River

@@ -21,4 +21,20 @@ pub struct Cli {
     /// Number of threads used in the worker pool for EACH service
     #[arg(long)]
     pub threads_per_service: Option<usize>,
+
+    /// Should the server be daemonized after starting?
+    #[arg(long)]
+    pub daemonize: bool,
+
+    /// Should the server take over an existing server?
+    #[arg(long)]
+    pub upgrade: bool,
+
+    /// Path to upgrade socket
+    #[arg(long)]
+    pub upgrade_socket: Option<PathBuf>,
+
+    /// Path to the pidfile, used for upgrade
+    #[arg(long)]
+    pub pidfile: Option<PathBuf>,
 }
