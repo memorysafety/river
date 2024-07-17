@@ -27,15 +27,41 @@ impl TryFrom<KdlDocument> for Config {
     type Error = miette::Error;
 
     fn try_from(value: KdlDocument) -> Result<Self, Self::Error> {
-        let threads_per_service = extract_threads_per_service(&value)?;
+        let SystemData {
+            threads_per_service,
+            daemonize,
+            upgrade_socket,
+            pid_file,
+        } = extract_system_data(&value)?;
         let (basic_proxies, file_servers) = extract_services(&value)?;
 
         Ok(Config {
             threads_per_service,
+            daemonize,
+            upgrade_socket,
+            pid_file,
             basic_proxies,
             file_servers,
             ..Config::default()
         })
+    }
+}
+
+struct SystemData {
+    threads_per_service: usize,
+    daemonize: bool,
+    upgrade_socket: Option<PathBuf>,
+    pid_file: Option<PathBuf>,
+}
+
+impl Default for SystemData {
+    fn default() -> Self {
+        Self {
+            threads_per_service: 8,
+            daemonize: false,
+            upgrade_socket: None,
+            pid_file: None,
+        }
     }
 }
 
@@ -435,11 +461,47 @@ fn extract_listener(
 }
 
 // system { threads-per-service N }
-fn extract_threads_per_service(doc: &KdlDocument) -> miette::Result<usize> {
-    let Some(tps) =
-        utils::optional_child_doc(doc, doc, "system").and_then(|n| n.get("threads-per-service"))
-    else {
-        // Not present, go ahead and return the default
+fn extract_system_data(doc: &KdlDocument) -> miette::Result<SystemData> {
+    // Get the top level system doc
+    let Some(sys) = utils::optional_child_doc(doc, doc, "system") else {
+        return Ok(SystemData::default());
+    };
+    let tps = extract_threads_per_service(doc, sys)?;
+
+    let daemonize = if let Some(n) = sys.get("daemonize") {
+        utils::extract_one_bool_arg(doc, n, "daemonize", n.entries())?
+    } else {
+        false
+    };
+
+    let upgrade_socket = if let Some(n) = sys.get("upgrade-socket") {
+        let x = utils::extract_one_str_arg(doc, n, "upgrade-socket", n.entries(), |s| {
+            Some(PathBuf::from(s))
+        })?;
+        Some(x)
+    } else {
+        None
+    };
+
+    let pid_file = if let Some(n) = sys.get("pid-file") {
+        let x = utils::extract_one_str_arg(doc, n, "pid-file", n.entries(), |s| {
+            Some(PathBuf::from(s))
+        })?;
+        Some(x)
+    } else {
+        None
+    };
+
+    Ok(SystemData {
+        threads_per_service: tps,
+        daemonize,
+        upgrade_socket,
+        pid_file,
+    })
+}
+
+fn extract_threads_per_service(doc: &KdlDocument, sys: &KdlDocument) -> miette::Result<usize> {
+    let Some(tps) = sys.get("threads-per-service") else {
         return Ok(8);
     };
 

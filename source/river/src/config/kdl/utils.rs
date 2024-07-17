@@ -109,6 +109,20 @@ pub(crate) fn extract_one_str_arg<T, F: FnOnce(&str) -> Option<T>>(
     .or_bail(format!("Incorrect argument for '{name}'"), doc, node.span())
 }
 
+/// Extract a single un-named bool argument, like `daemonize true`
+pub(crate) fn extract_one_bool_arg(
+    doc: &KdlDocument,
+    node: &KdlNode,
+    name: &str,
+    args: &[KdlEntry],
+) -> miette::Result<bool> {
+    match args {
+        [one] => one.value().as_bool(),
+        _ => None,
+    }
+    .or_bail(format!("Incorrect argument for '{name}'"), doc, node.span())
+}
+
 /// Like `extract_one_str_arg`, but with bonus "str:str" key/val pairs
 ///
 /// `selection "Ketama" key="UriPath"`
