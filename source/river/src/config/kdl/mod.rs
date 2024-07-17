@@ -54,6 +54,17 @@ struct SystemData {
     pid_file: Option<PathBuf>,
 }
 
+impl Default for SystemData {
+    fn default() -> Self {
+        Self {
+            threads_per_service: 8,
+            daemonize: false,
+            upgrade_socket: None,
+            pid_file: None,
+        }
+    }
+}
+
 /// Extract all services from the top level document
 fn extract_services(
     doc: &KdlDocument,
@@ -452,7 +463,9 @@ fn extract_listener(
 // system { threads-per-service N }
 fn extract_system_data(doc: &KdlDocument) -> miette::Result<SystemData> {
     // Get the top level system doc
-    let sys = utils::required_child_doc(doc, doc, "system")?;
+    let Some(sys) = utils::optional_child_doc(doc, doc, "system") else {
+        return Ok(SystemData::default());
+    };
     let tps = extract_threads_per_service(doc, sys)?;
 
     let daemonize = if let Some(n) = sys.get("daemonize") {

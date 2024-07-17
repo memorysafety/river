@@ -378,6 +378,10 @@ pub mod test {
                 },
             ],
             file_servers: Vec::new(),
+            daemonize: false,
+            pid_file: None,
+            upgrade_socket: None,
+            upgrade: false,
         };
 
         let mut cfg = internal::Config::default();

@@ -116,6 +116,10 @@ fn load_test() {
             ],
             base_path: Some(".".into()),
         }],
+        daemonize: false,
+        pid_file: Some("/tmp/river.pidfile".into()),
+        upgrade_socket: Some("/tmp/river-upgrade.sock".into()),
+        upgrade: false,
     };
 
     assert_eq!(val.validate_configs, expected.validate_configs);
