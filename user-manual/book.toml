@@ -1,0 +1,6 @@
+[book]
+authors = ["James Munns"]
+language = "en"
+multilingual = false
+src = "src"
+title = "River User Manual"
