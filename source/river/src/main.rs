@@ -13,12 +13,6 @@ fn main() {
     // Read from the various configuration files
     let conf = config::render_config();
 
-    // If the user asked to validate the configs - do it. This will also
-    // cause pingora to exit immediately when we start
-    if conf.validate_configs {
-        conf.validate();
-    }
-
     // Start the Server, which we will add services to.
     let mut my_server =
         Server::new_with_opt_and_conf(conf.pingora_opt(), conf.pingora_server_conf());

@@ -12,6 +12,7 @@ use pingora::{
     server::configuration::{Opt as PingoraOpt, ServerConf as PingoraServerConf},
     upstreams::peer::HttpPeer,
 };
+use tracing::warn;
 
 use crate::proxy::request_selector::{null_selector, RequestSelector};
 
@@ -53,14 +54,14 @@ impl Config {
                 .pid_file
                 .as_ref()
                 .cloned()
-                .unwrap_or_else(|| PathBuf::from("river.pidfile"))
+                .unwrap_or_else(|| PathBuf::from("/tmp/river.pidfile"))
                 .to_string_lossy()
                 .into(),
             upgrade_sock: self
                 .upgrade_socket
                 .as_ref()
                 .cloned()
-                .unwrap_or_else(|| PathBuf::from("river-upgrade.sock"))
+                .unwrap_or_else(|| PathBuf::from("/tmp/river-upgrade.sock"))
                 .to_string_lossy()
                 .into(),
             user: None,
@@ -73,22 +74,37 @@ impl Config {
     }
 
     pub fn validate(&self) {
-        // TODO: validation logic
+        // This is currently mostly ad-hoc checks, we should potentially be a bit
+        // more systematic about this.
         if self.daemonize {
-            assert!(
-                self.pid_file.is_some(),
-                "Daemonize commanded but no pid file set!"
-            );
+            if let Some(pf) = self.pid_file.as_ref() {
+                // NOTE: currently due to https://github.com/cloudflare/pingora/issues/331,
+                // we are not able to use relative paths.
+                assert!(pf.is_absolute(), "pid file path must be absolute, see https://github.com/cloudflare/pingora/issues/331");
+            } else {
+                panic!("Daemonize commanded but no pid file set!");
+            }
+        } else if let Some(pf) = self.pid_file.as_ref() {
+            if !pf.is_absolute() {
+                warn!("pid file path must be absolute. Currently: {:?}, see https://github.com/cloudflare/pingora/issues/331", pf);
+            }
         }
         if self.upgrade {
             assert!(
                 cfg!(target_os = "linux"),
                 "Upgrade is only supported on linux!"
             );
-            assert!(
-                self.upgrade_socket.is_some(),
-                "Upgrade commanded but no upgrade socket set!"
-            );
+            if let Some(us) = self.upgrade_socket.as_ref() {
+                // NOTE: currently due to https://github.com/cloudflare/pingora/issues/331,
+                // we are not able to use relative paths.
+                assert!(us.is_absolute(), "upgrade socket path must be absolute, see https://github.com/cloudflare/pingora/issues/331");
+            } else {
+                panic!("Upgrade commanded but upgrade socket path not set!");
+            }
+        } else if let Some(us) = self.upgrade_socket.as_ref() {
+            if !us.is_absolute() {
+                warn!("upgrade socket path must be absolute. Currently: {:?}, see https://github.com/cloudflare/pingora/issues/331", us);
+            }
         }
     }
 }
