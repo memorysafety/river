@@ -67,6 +67,8 @@ pub fn render_config() -> internal::Config {
     tracing::info!("Applying CLI options");
     apply_cli(&mut config, &c);
 
+    // We always validate the configuration - if the user selected "validate"
+    // then pingora will exit when IT also validates the config.
     tracing::info!(?config, "Full configuration",);
     tracing::info!("Validating...");
     config.validate();
