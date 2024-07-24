@@ -21,6 +21,7 @@ pub fn river_file_server(
         index_file: Vec::new().into(),
         page_404: None,
         precompressed: Vec::new().into(),
+        ..Default::default()
     };
     let file_server = FileServer {
         server: StaticFilesHandler::try_from(fsconf)

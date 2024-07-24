@@ -33,6 +33,7 @@ kdl = "4.6.0"
 miette = { version = "5.10.0", features = ["fancy"] }
 thiserror = "1.0.61"
 http = "1.0.0"
+futures-util = "0.3.30"
 
 [dependencies.static-files-module]
 version = "0.2"
@@ -62,16 +63,16 @@ features = [
 # Pingora dependencies
 
 [dependencies.pingora]
-version = "0.2.0"
+version = "0.3.0"
 
 [dependencies.pingora-core]
-version = "0.2.0"
+version = "0.3.0"
 
 [dependencies.pingora-proxy]
-version = "0.2.0"
+version = "0.3.0"
 
 [dependencies.pingora-http]
-version = "0.2.0"
+version = "0.3.0"
 
 [dependencies.pingora-load-balancing]
-version = "0.2.0"
+version = "0.3.0"

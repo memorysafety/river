@@ -27,35 +27,35 @@ lto = "thin"
 
 [patch.crates-io.pingora-load-balancing]
 git = "https://github.com/memorysafety/pingora.git"
-rev = "12ca93c6b187a68ff9a526b4c4e669f602244366"
+rev = "a98eadde498a45f32ab906d629342954fa173d11"
 # path = "../pingora/pingora-load-balancing"
 
 [patch.crates-io.pingora-core]
 git = "https://github.com/memorysafety/pingora.git"
-rev = "12ca93c6b187a68ff9a526b4c4e669f602244366"
+rev = "a98eadde498a45f32ab906d629342954fa173d11"
 # path = "../pingora/pingora-core"
 
 [patch.crates-io.pingora-cache]
 git = "https://github.com/memorysafety/pingora.git"
-rev = "12ca93c6b187a68ff9a526b4c4e669f602244366"
+rev = "a98eadde498a45f32ab906d629342954fa173d11"
 # path = "../pingora/pingora-cache"
 
 [patch.crates-io.pingora-http]
 git = "https://github.com/memorysafety/pingora.git"
-rev = "12ca93c6b187a68ff9a526b4c4e669f602244366"
+rev = "a98eadde498a45f32ab906d629342954fa173d11"
 # path = "../pingora/pingora-http"
 
 [patch.crates-io.pingora-proxy]
 git = "https://github.com/memorysafety/pingora.git"
-rev = "12ca93c6b187a68ff9a526b4c4e669f602244366"
+rev = "a98eadde498a45f32ab906d629342954fa173d11"
 # path = "../pingora/pingora-proxy"
 
 [patch.crates-io.static-files-module]
-git = "https://github.com/jamesmunns/pandora-web-server.git"
-rev = "f3a84be5d3be0daa65303f62aa01d0b57e7cc708"
+git = "https://github.com/pandora-web-server/pandora-web-server.git"
+rev = "fe5d7dfc7d943d2bd8371309084a775db99e84f0"
 # path = "../pandora-web-server/static-files-module"
 
 [patch.crates-io.pandora-module-utils]
-git = "https://github.com/jamesmunns/pandora-web-server.git"
-rev = "f3a84be5d3be0daa65303f62aa01d0b57e7cc708"
+git = "https://github.com/pandora-web-server/pandora-web-server.git"
+rev = "fe5d7dfc7d943d2bd8371309084a775db99e84f0"
 # path = "../pandora-web-server/pandora-module-utils"
