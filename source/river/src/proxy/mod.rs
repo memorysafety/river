@@ -4,18 +4,20 @@
 //! this includes creation of HTTP proxy services, as well as Path Control
 //! modifiers.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use async_trait::async_trait;
+use futures_util::FutureExt;
 
 use pingora::{server::Server, Error};
 use pingora_core::{upstreams::peer::HttpPeer, Result};
 use pingora_http::{RequestHeader, ResponseHeader};
 use pingora_load_balancing::{
+    discovery,
     selection::{
         consistent::KetamaHashing, BackendIter, BackendSelection, FVNHash, Random, RoundRobin,
     },
-    LoadBalancer,
+    Backend, Backends, LoadBalancer,
 };
 use pingora_proxy::{ProxyHttp, Session};
 
@@ -32,12 +34,6 @@ pub mod request_modifiers;
 pub mod request_selector;
 pub mod response_modifiers;
 
-#[derive(Clone, Hash, PartialEq, Eq)]
-pub struct BonusData {
-    // todo: what else do we need here?
-    peer: HttpPeer,
-}
-
 /// The [RiverProxyService] is intended to capture the behaviors used to extend
 /// the [HttpProxy] functionality by providing a [ProxyHttp] trait implementation.
 ///
@@ -49,7 +45,7 @@ pub struct RiverProxyService<BS: BackendSelection> {
     /// All modifiers used when implementing the [ProxyHttp] trait.
     pub modifiers: Modifiers,
     /// Load Balancer
-    pub load_balancer: LoadBalancer<BS, BonusData>,
+    pub load_balancer: LoadBalancer<BS>,
     pub request_selector: RequestSelector,
 }
 
@@ -63,18 +59,18 @@ pub fn river_proxy_service(
     type ServiceMaker = fn(ProxyConfig, &Server) -> Box<dyn pingora::services::Service>;
 
     let service_maker: ServiceMaker = match conf.upstream_options.selection {
-        SelectionKind::RoundRobin => RiverProxyService::<RoundRobin<BonusData>>::from_basic_conf,
-        SelectionKind::Random => RiverProxyService::<Random<BonusData>>::from_basic_conf,
-        SelectionKind::Fnv => RiverProxyService::<FVNHash<BonusData>>::from_basic_conf,
-        SelectionKind::Ketama => RiverProxyService::<KetamaHashing<BonusData>>::from_basic_conf,
+        SelectionKind::RoundRobin => RiverProxyService::<RoundRobin>::from_basic_conf,
+        SelectionKind::Random => RiverProxyService::<Random>::from_basic_conf,
+        SelectionKind::Fnv => RiverProxyService::<FVNHash>::from_basic_conf,
+        SelectionKind::Ketama => RiverProxyService::<KetamaHashing>::from_basic_conf,
     };
     service_maker(conf, server)
 }
 
 impl<BS> RiverProxyService<BS>
 where
-    BS: BackendSelection<Metadata = BonusData> + Send + Sync + 'static,
-    BS::Iter: BackendIter<Metadata = BonusData>,
+    BS: BackendSelection + Send + Sync + 'static,
+    BS::Iter: BackendIter,
 {
     /// Create a new [RiverProxyService] from the given [ProxyConfig]
     pub fn from_basic_conf(
@@ -83,12 +79,23 @@ where
     ) -> Box<dyn pingora::services::Service> {
         let modifiers = Modifiers::from_conf(&conf.path_control).unwrap();
 
-        let upstreams = LoadBalancer::<BS, BonusData>::try_from_iter(
-            conf.upstreams
-                .iter()
-                .map(|u| (u._address.clone(), BonusData { peer: u.clone() })),
-        )
-        .unwrap();
+        // TODO: This maybe could be done cleaner? This is a sort-of inlined
+        // version of `LoadBalancer::try_from_iter` with the ability to add
+        // metadata extensions
+        let mut backends = BTreeSet::new();
+        for uppy in conf.upstreams {
+            let mut backend = Backend::new(&uppy._address.to_string()).unwrap();
+            assert!(backend.ext.insert::<HttpPeer>(uppy).is_none());
+            backends.insert(backend);
+        }
+        let disco = discovery::Static::new(backends);
+        let upstreams = LoadBalancer::<BS>::from_backends(Backends::new(disco));
+        upstreams
+            .update()
+            .now_or_never()
+            .expect("static should not block")
+            .expect("static should not error");
+        // end of TODO
 
         let mut my_proxy = pingora_proxy::http_proxy_service_with_name(
             &server.configuration,
@@ -191,8 +198,8 @@ pub struct RiverContext {
 #[async_trait]
 impl<BS> ProxyHttp for RiverProxyService<BS>
 where
-    BS: BackendSelection<Metadata = BonusData> + Send + Sync + 'static,
-    BS::Iter: BackendIter<Metadata = BonusData>,
+    BS: BackendSelection + Send + Sync + 'static,
+    BS::Iter: BackendIter,
 {
     type CTX = RiverContext;
 
@@ -218,10 +225,15 @@ where
         // Manually clear the selector buf to avoid accidental leaks
         ctx.selector_buf.clear();
 
-        let backend = backend.ok_or_else(|| pingora::Error::new_str("oops"))?;
+        let backend =
+            backend.ok_or_else(|| pingora::Error::new_str("Unable to determine backend"))?;
 
         // Retrieve the HttpPeer from the associated backend metadata
-        Ok(Box::new(backend.metadata.peer.clone()))
+        backend
+            .ext
+            .get::<HttpPeer>()
+            .map(|p| Box::new(p.clone()))
+            .ok_or_else(|| pingora::Error::new_str("Fatal: Missing selected backend metadata"))
     }
 
     /// Handle the "upstream request filter" phase, where we can choose to make
