@@ -6,7 +6,7 @@ use std::{
 
 use kdl::{KdlDocument, KdlEntry, KdlNode};
 use miette::{bail, Diagnostic, SourceSpan};
-use pingora::upstreams::peer::HttpPeer;
+use pingora::{protocols::ALPN, upstreams::peer::HttpPeer};
 
 use crate::{
     config::internal::{
@@ -392,21 +392,48 @@ fn extract_connector(
         return Err(Bad::docspan("Not a valid socket address", doc, node.span()).into());
     };
 
-    let args = utils::str_str_args(doc, args)?;
-    let (tls, sni) = match args.as_slice() {
-        [] => (false, String::new()),
-        [("tls-sni", sni)] => (true, sni.to_string()),
-        _ => {
+    // TODO: consistent enforcement of only-known args?
+    let args = utils::str_str_args(doc, args)?
+        .into_iter()
+        .collect::<HashMap<&str, &str>>();
+
+    let proto = match args.get("proto").copied() {
+        None => None,
+        Some("h1-only") => Some(ALPN::H1),
+        Some("h2-only") => Some(ALPN::H2),
+        Some("h1-or-h2") => {
+            tracing::warn!("accepting 'h1-or-h2' as meaning 'h2-or-h1'");
+            Some(ALPN::H2H1)
+        }
+        Some("h2-or-h1") => Some(ALPN::H2H1),
+        Some(other) => {
             return Err(Bad::docspan(
-                "This should have zero args or just 'tls-sni'",
+                format!(
+                    "'proto' should be one of 'h1-only', 'h2-only', or 'h2-or-h1', found '{other}'"
+                ),
                 doc,
                 node.span(),
             )
             .into());
         }
     };
+    let tls_sni = args.get("tls-sni");
 
-    Ok(HttpPeer::new(sadd, tls, sni))
+    let (tls, sni, alpn) = match (proto, tls_sni) {
+        (None, None) | (Some(ALPN::H1), None) => (false, String::new(), ALPN::H1),
+        (None, Some(sni)) => (true, sni.to_string(), ALPN::H2H1),
+        (Some(_), None) => {
+            return Err(
+                Bad::docspan("'tls-sni' is required for HTTP2 support", doc, node.span()).into(),
+            );
+        }
+        (Some(p), Some(sni)) => (true, sni.to_string(), p),
+    };
+
+    let mut peer = HttpPeer::new(sadd, tls, sni);
+    peer.options.alpn = alpn;
+
+    Ok(peer)
 }
 
 // services { Service { listeners { ... } } }
@@ -468,7 +495,6 @@ fn extract_listener(
                 },
             }),
         }
-
     } else if let Ok(pb) = name.parse::<PathBuf>() {
         // TODO: Should we check that this path exists? Otherwise it seems to always match
         Ok(ListenerConfig {

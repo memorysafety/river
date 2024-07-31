@@ -4,12 +4,12 @@
 //! this includes creation of HTTP proxy services, as well as Path Control
 //! modifiers.
 
-use std::{collections::{BTreeMap, BTreeSet}, sync::atomic::{AtomicUsize, Ordering}};
+use std::collections::{BTreeMap, BTreeSet};
 
 use async_trait::async_trait;
 use futures_util::FutureExt;
 
-use pingora::{protocols::ALPN, server::Server, Error};
+use pingora::{server::Server, Error};
 use pingora_core::{upstreams::peer::HttpPeer, Result};
 use pingora_http::{RequestHeader, ResponseHeader};
 use pingora_load_balancing::{
@@ -83,8 +83,7 @@ where
         // version of `LoadBalancer::try_from_iter` with the ability to add
         // metadata extensions
         let mut backends = BTreeSet::new();
-        for mut uppy in conf.upstreams {
-            uppy.options.alpn = ALPN::H2H1;
+        for uppy in conf.upstreams {
             let mut backend = Backend::new(&uppy._address.to_string()).unwrap();
             assert!(backend.ext.insert::<HttpPeer>(uppy).is_none());
             backends.insert(backend);
@@ -191,18 +190,9 @@ impl Modifiers {
     }
 }
 
-static CTXCT: AtomicUsize = AtomicUsize::new(0);
-
 /// Per-peer context. Not currently used
 pub struct RiverContext {
     selector_buf: Vec<u8>,
-    ct: usize,
-}
-
-impl Drop for RiverContext {
-    fn drop(&mut self) {
-        tracing::info!("Dropping ctx {}", self.ct);
-    }
 }
 
 #[async_trait]
@@ -214,11 +204,8 @@ where
     type CTX = RiverContext;
 
     fn new_ctx(&self) -> Self::CTX {
-        let ct = CTXCT.fetch_add(1, Ordering::Relaxed);
-        tracing::info!("Creating ctx {ct}");
         RiverContext {
             selector_buf: Vec::new(),
-            ct,
         }
     }
 

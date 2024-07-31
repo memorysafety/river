@@ -319,6 +319,7 @@ pub mod test {
                             source: internal::ListenerKind::Tcp {
                                 addr: "0.0.0.0:8080".into(),
                                 tls: None,
+                                offer_h2: false,
                             },
                         },
                         internal::ListenerConfig {
@@ -328,6 +329,7 @@ pub mod test {
                                     cert_path: "./assets/test.crt".into(),
                                     key_path: "./assets/test.key".into(),
                                 }),
+                                offer_h2: false,
                             },
                         },
                     ],
@@ -368,6 +370,7 @@ pub mod test {
                         source: internal::ListenerKind::Tcp {
                             addr: "0.0.0.0:8000".into(),
                             tls: None,
+                            offer_h2: false,
                         },
                     }],
                     upstreams: vec![HttpPeer::new("91.107.223.4:80", false, String::new())],

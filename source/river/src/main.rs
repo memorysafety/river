@@ -73,10 +73,13 @@ pub fn populate_listners<T>(
                     settings.enable_h2();
                 }
 
-                service
-                    .add_tls_with_settings(&addr, None, settings);
+                service.add_tls_with_settings(&addr, None, settings);
             }
-            ListenerKind::Tcp { addr, tls: None, offer_h2 } => {
+            ListenerKind::Tcp {
+                addr,
+                tls: None,
+                offer_h2,
+            } => {
                 if offer_h2 {
                     panic!("Unsupported configuration: {addr:?} configured without TLS, but H2 enabled which requires TLS");
                 }

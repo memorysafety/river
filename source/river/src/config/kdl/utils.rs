@@ -117,30 +117,32 @@ pub(crate) fn str_value_args<'a>(
 /// If the argument exists, ensure it is a str
 ///
 /// Useful with [`str_value_args()`].
-pub(crate) fn map_ensure_str<'a>(doc: &'_ KdlDocument, val: Option<&'a KdlEntry>) -> miette::Result<Option<&'a str>> {
+pub(crate) fn map_ensure_str<'a>(
+    doc: &'_ KdlDocument,
+    val: Option<&'a KdlEntry>,
+) -> miette::Result<Option<&'a str>> {
     let Some(v) = val else {
         return Ok(None);
     };
     match v.value().as_string() {
         Some(vas) => Ok(Some(vas)),
-        None => {
-            Err(Bad::docspan("Expected string argument", doc, v.span()).into())
-        }
+        None => Err(Bad::docspan("Expected string argument", doc, v.span()).into()),
     }
 }
 
 /// If the argument exists, ensure it is a bool
 ///
 /// Useful with [`str_value_args()`].
-pub(crate) fn map_ensure_bool(doc: &KdlDocument, val: Option<&KdlEntry>) -> miette::Result<Option<bool>> {
+pub(crate) fn map_ensure_bool(
+    doc: &KdlDocument,
+    val: Option<&KdlEntry>,
+) -> miette::Result<Option<bool>> {
     let Some(v) = val else {
         return Ok(None);
     };
     match v.value().as_bool() {
         Some(vas) => Ok(Some(vas)),
-        None => {
-            Err(Bad::docspan("Expected bool argument", doc, v.span()).into())
-        }
+        None => Err(Bad::docspan("Expected bool argument", doc, v.span()).into()),
     }
 }
 
