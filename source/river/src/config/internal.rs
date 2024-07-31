@@ -158,6 +158,7 @@ pub enum ListenerKind {
     Tcp {
         addr: String,
         tls: Option<TlsConfig>,
+        offer_h2: bool,
     },
     Uds(PathBuf),
 }

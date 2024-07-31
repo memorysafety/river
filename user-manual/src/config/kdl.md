@@ -74,7 +74,7 @@ services {
     Example1 {
         listeners {
             "0.0.0.0:8080"
-            "0.0.0.0:4443" cert-path="./assets/test.crt" key-path="./assets/test.key"
+            "0.0.0.0:4443" cert-path="./assets/test.crt" key-path="./assets/test.key" offer-h2=true
         }
         connectors {
             load-balance {
@@ -131,7 +131,7 @@ This section contains one or more Listeners.
 This section is required.
 Listeners are specified in the form:
 
-`"SOCKETADDR" [cert-path="PATH" key-path="PATH"]`
+`"SOCKETADDR" [cert-path="PATH" key-path="PATH" [offer-h2=BOOL]]`
 
 `SOCKETADDR` is a UTF-8 string that is parsed into an IPv4 or IPv6 address and port.
 
@@ -139,6 +139,13 @@ If the listener should accept TLS connections, the certificate and key paths are
 specified in the form `cert-path="PATH" key-path="PATH"`, where `PATH` is a UTF-8
 path to the relevant files. If these are not provided, connections will be accepted
 without TLS.
+
+If the listener should offer HTTP2.0 connections, this is specified in the form
+`offer-h2=BOOL`, where `BOOL` is either `true` or `false`. `offer-h2` may only
+be specified if `cert-path` and `key-path` are present. This configuration is
+optional, and defaults to `true` if TLS is configured. If this field is `true`,
+HTTP2.0 will be offered (but not required). If this field is `false` then only
+HTTP1.x will be offered.
 
 ### `services.$NAME.connectors`
 

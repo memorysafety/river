@@ -189,6 +189,7 @@ impl From<ListenerKind> for super::internal::ListenerKind {
             ListenerKind::Tcp { addr, tls } => super::internal::ListenerKind::Tcp {
                 addr,
                 tls: tls.map(Into::into),
+                offer_h2: false,
             },
             ListenerKind::Uds(a) => super::internal::ListenerKind::Uds(a),
         }

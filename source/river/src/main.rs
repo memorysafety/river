@@ -5,6 +5,7 @@ mod proxy;
 use crate::{files::river_file_server, proxy::river_proxy_service};
 use config::internal::{ListenerConfig, ListenerKind};
 use pingora::{server::Server, services::Service};
+use pingora_core::listeners::TlsSettings;
 
 fn main() {
     // Set up tracing, including catching `log` crate logs from pingora crates
@@ -57,17 +58,28 @@ pub fn populate_listners<T>(
             ListenerKind::Tcp {
                 addr,
                 tls: Some(tls_cfg),
+                offer_h2,
             } => {
                 let cert_path = tls_cfg
                     .cert_path
                     .to_str()
                     .expect("cert path should be utf8");
                 let key_path = tls_cfg.key_path.to_str().expect("key path should be utf8");
-                service
-                    .add_tls(&addr, cert_path, key_path)
+
+                // TODO: Make conditional!
+                let mut settings = TlsSettings::intermediate(cert_path, key_path)
                     .expect("adding TLS listener shouldn't fail");
+                if offer_h2 {
+                    settings.enable_h2();
+                }
+
+                service
+                    .add_tls_with_settings(&addr, None, settings);
             }
-            ListenerKind::Tcp { addr, tls: None } => {
+            ListenerKind::Tcp { addr, tls: None, offer_h2 } => {
+                if offer_h2 {
+                    panic!("Unsupported configuration: {addr:?} configured without TLS, but H2 enabled which requires TLS");
+                }
                 service.add_tcp(&addr);
             }
             ListenerKind::Uds(path) => {

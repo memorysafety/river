@@ -416,40 +416,59 @@ fn extract_listener(
     name: &str,
     args: &[KdlEntry],
 ) -> miette::Result<ListenerConfig> {
-    let mut args = utils::str_str_args(doc, args)?;
-    args.sort_by_key(|a| a.0);
+    let args = utils::str_value_args(doc, args)?
+        .into_iter()
+        .collect::<HashMap<&str, &KdlEntry>>();
 
     // Is this a bindable name?
     if name.parse::<SocketAddr>().is_ok() {
         // Cool: do we have reasonable args for this?
-        match args.as_slice() {
-            // No argument - it's a regular TCP listener
-            [] => Ok(ListenerConfig {
+        let cert_path = utils::map_ensure_str(doc, args.get("cert-path").copied())?;
+        let key_path = utils::map_ensure_str(doc, args.get("key-path").copied())?;
+        let offer_h2 = utils::map_ensure_bool(doc, args.get("offer-h2").copied())?;
+
+        match (cert_path, key_path, offer_h2) {
+            // No config? No problem!
+            (None, None, None) => Ok(ListenerConfig {
                 source: ListenerKind::Tcp {
                     addr: name.to_string(),
                     tls: None,
+                    offer_h2: false,
                 },
             }),
-            // exactly these two args: it's a TLS listener
-            [("cert-path", cpath), ("key-path", kpath)] => Ok(ListenerConfig {
+            // We must have both of cert-path and key-path if both are present
+            // ignore "offer-h2" if this is incorrect
+            (None, Some(_), _) | (Some(_), None, _) => {
+                return Err(Bad::docspan(
+                    "'cert-path' and 'key-path' must either BOTH be present, or NEITHER should be present",
+                    doc,
+                    node.span(),
+                )
+                .into());
+            }
+            // We can't offer H2 if we don't have TLS (at least for now, unless we
+            // expose H2C settings in pingora)
+            (None, None, Some(_)) => {
+                return Err(Bad::docspan(
+                    "'offer-h2' requires TLS, specify 'cert-path' and 'key-path'",
+                    doc,
+                    node.span(),
+                )
+                .into());
+            }
+            (Some(cpath), Some(kpath), offer_h2) => Ok(ListenerConfig {
                 source: ListenerKind::Tcp {
                     addr: name.to_string(),
                     tls: Some(TlsConfig {
                         cert_path: cpath.into(),
                         key_path: kpath.into(),
                     }),
+                    // Default to enabling H2 if unspecified
+                    offer_h2: offer_h2.unwrap_or(true),
                 },
             }),
-            // Otherwise, I dunno what this is
-            _ => {
-                return Err(Bad::docspan(
-                    "listeners must have no args or both cert-path and key-path",
-                    doc,
-                    node.span(),
-                )
-                .into())
-            }
         }
+
     } else if let Ok(pb) = name.parse::<PathBuf>() {
         // TODO: Should we check that this path exists? Otherwise it seems to always match
         Ok(ListenerConfig {
