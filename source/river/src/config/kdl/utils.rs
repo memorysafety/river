@@ -1,6 +1,6 @@
 //! Various ad-hoc KDL document parsers used
 
-use super::OptExtParse;
+use super::{Bad, OptExtParse};
 use kdl::{KdlDocument, KdlEntry, KdlNode};
 use std::collections::HashMap;
 
@@ -92,6 +92,58 @@ pub(crate) fn str_str_args<'a>(
         out.push((name, val));
     }
     Ok(out)
+}
+
+/// Useful for collecting all arguments as str:Value key pairs
+///
+/// KdlEntry is returned instead of KdlValue to allow for retaining the
+/// span for error messages
+pub(crate) fn str_value_args<'a>(
+    doc: &KdlDocument,
+    args: &'a [KdlEntry],
+) -> miette::Result<Vec<(&'a str, &'a KdlEntry)>> {
+    let mut out = vec![];
+    for arg in args {
+        let name =
+            arg.name()
+                .map(|a| a.value())
+                .or_bail("arguments should be named", doc, arg.span())?;
+
+        out.push((name, arg));
+    }
+    Ok(out)
+}
+
+/// If the argument exists, ensure it is a str
+///
+/// Useful with [`str_value_args()`].
+pub(crate) fn map_ensure_str<'a>(
+    doc: &'_ KdlDocument,
+    val: Option<&'a KdlEntry>,
+) -> miette::Result<Option<&'a str>> {
+    let Some(v) = val else {
+        return Ok(None);
+    };
+    match v.value().as_string() {
+        Some(vas) => Ok(Some(vas)),
+        None => Err(Bad::docspan("Expected string argument", doc, v.span()).into()),
+    }
+}
+
+/// If the argument exists, ensure it is a bool
+///
+/// Useful with [`str_value_args()`].
+pub(crate) fn map_ensure_bool(
+    doc: &KdlDocument,
+    val: Option<&KdlEntry>,
+) -> miette::Result<Option<bool>> {
+    let Some(v) = val else {
+        return Ok(None);
+    };
+    match v.value().as_bool() {
+        Some(vas) => Ok(Some(vas)),
+        None => Err(Bad::docspan("Expected bool argument", doc, v.span()).into()),
+    }
 }
 
 /// Extract a single un-named string argument, like `discovery "Static"`

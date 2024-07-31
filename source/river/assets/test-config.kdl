@@ -28,7 +28,7 @@ services {
         // as we'd like, at least one is required
         listeners {
             "0.0.0.0:8080"
-            "0.0.0.0:4443" cert-path="./assets/test.crt" key-path="./assets/test.key"
+            "0.0.0.0:4443" cert-path="./assets/test.crt" key-path="./assets/test.key" offer-h2=true
         }
 
         // Connectors are the "upstream" interfaces that we connect with. We can name as many
@@ -44,7 +44,7 @@ services {
                 discovery "Static"
                 health-check "None"
             }
-            "91.107.223.4:443" tls-sni="onevariable.com"
+            "91.107.223.4:443" tls-sni="onevariable.com" proto="h2-or-h1"
         }
 
         // Path control are optional modifiers for requests and responses
@@ -79,7 +79,7 @@ services {
         // at least one.
         listeners {
             "0.0.0.0:9000"
-            "0.0.0.0:9443" cert-path="./assets/test.crt" key-path="./assets/test.key"
+            "0.0.0.0:9443" cert-path="./assets/test.crt" key-path="./assets/test.key" offer-h2=true
         }
         // File servers have additional configuration items
         file-server {

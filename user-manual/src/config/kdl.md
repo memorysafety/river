@@ -74,7 +74,7 @@ services {
     Example1 {
         listeners {
             "0.0.0.0:8080"
-            "0.0.0.0:4443" cert-path="./assets/test.crt" key-path="./assets/test.key"
+            "0.0.0.0:4443" cert-path="./assets/test.crt" key-path="./assets/test.key" offer-h2=true
         }
         connectors {
             load-balance {
@@ -82,7 +82,7 @@ services {
                 discovery "Static"
                 health-check "None"
             }
-            "91.107.223.4:443" tls-sni="onevariable.com"
+            "91.107.223.4:443" tls-sni="onevariable.com" proto="h2-or-h1"
         }
         path-control {
             upstream-request {
@@ -98,7 +98,7 @@ services {
     Example3 {
         listeners {
             "0.0.0.0:9000"
-            "0.0.0.0:9443" cert-path="./assets/test.crt" key-path="./assets/test.key"
+            "0.0.0.0:9443" cert-path="./assets/test.crt" key-path="./assets/test.key" offer-h2=true
         }
         file-server {
             // The base path is what will be used as the "root" of the file server
@@ -131,7 +131,7 @@ This section contains one or more Listeners.
 This section is required.
 Listeners are specified in the form:
 
-`"SOCKETADDR" [cert-path="PATH" key-path="PATH"]`
+`"SOCKETADDR" [cert-path="PATH" key-path="PATH" [offer-h2=BOOL]]`
 
 `SOCKETADDR` is a UTF-8 string that is parsed into an IPv4 or IPv6 address and port.
 
@@ -140,19 +140,37 @@ specified in the form `cert-path="PATH" key-path="PATH"`, where `PATH` is a UTF-
 path to the relevant files. If these are not provided, connections will be accepted
 without TLS.
 
+If the listener should offer HTTP2.0 connections, this is specified in the form
+`offer-h2=BOOL`, where `BOOL` is either `true` or `false`. `offer-h2` may only
+be specified if `cert-path` and `key-path` are present. This configuration is
+optional, and defaults to `true` if TLS is configured. If this field is `true`,
+HTTP2.0 will be offered (but not required). If this field is `false` then only
+HTTP1.x will be offered.
+
 ### `services.$NAME.connectors`
 
 This section contains one or more Connectors.
 This section is required.
 Connectors are specified in the form:
 
-`"SOCKETADDR" [tls-sni="DOMAIN"]`
+`"SOCKETADDR" [tls-sni="DOMAIN"] [proto="PROTO"]`
 
 `SOCKETADDR` is a UTF-8 string that is parsed into an IPv4 or IPv6 address and port.
 
 If the connector should use TLS for connections to the upstream server, the TLS-SNI
 is specified in the form `tls-sni="DOMAIN"`, where DOMAIN is a domain name. If this
 is not provided, connections to upstream servers will be made without TLS.
+
+The protocol used to connect with the upstream server us specified in the form
+`proto="PROTO"`, where `PROTO` is a string with one of the following values:
+
+* `h1-only`: Only HTTP1.0 will be used to connect
+* `h2-only`: Only HTTP2.0 will be used to connect
+* `h2-or-h1`: HTTP2.0 will be preferred, with fallback to HTTP1.0
+
+The `proto` field is optional. If it is not specified and TLS is configured, the default
+will be `h2-or-h1`. If TLS is not configured, the default will be `h1-only`, and any
+other option will result in an error.
 
 ### `services.$NAME.connectors.load-balance`
 

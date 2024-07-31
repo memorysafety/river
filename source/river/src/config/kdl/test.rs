@@ -31,6 +31,7 @@ fn load_test() {
                         source: crate::config::internal::ListenerKind::Tcp {
                             addr: "0.0.0.0:8080".into(),
                             tls: None,
+                            offer_h2: false,
                         },
                     },
                     ListenerConfig {
@@ -40,6 +41,7 @@ fn load_test() {
                                 cert_path: "./assets/test.crt".into(),
                                 key_path: "./assets/test.key".into(),
                             }),
+                            offer_h2: true,
                         },
                     },
                 ],
@@ -85,6 +87,7 @@ fn load_test() {
                     source: crate::config::internal::ListenerKind::Tcp {
                         addr: "0.0.0.0:8000".into(),
                         tls: None,
+                        offer_h2: false,
                     },
                 }],
                 upstreams: vec![HttpPeer::new("91.107.223.4:80", false, String::new())],
@@ -102,6 +105,7 @@ fn load_test() {
                     source: crate::config::internal::ListenerKind::Tcp {
                         addr: "0.0.0.0:9000".into(),
                         tls: None,
+                        offer_h2: false,
                     },
                 },
                 ListenerConfig {
@@ -111,6 +115,7 @@ fn load_test() {
                             cert_path: "./assets/test.crt".into(),
                             key_path: "./assets/test.key".into(),
                         }),
+                        offer_h2: true,
                     },
                 },
             ],
@@ -218,7 +223,8 @@ fn one_service() {
         val.basic_proxies[0].listeners[0].source,
         ListenerKind::Tcp {
             addr: "127.0.0.1:80".into(),
-            tls: None
+            tls: None,
+            offer_h2: false,
         }
     );
     assert_eq!(
