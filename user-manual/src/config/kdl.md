@@ -85,6 +85,9 @@ services {
             "91.107.223.4:443" tls-sni="onevariable.com" proto="h2-or-h1"
         }
         path-control {
+            request-filters {
+                filter kind="block-cidr-range" addrs="192.168.0.0/16, 10.0.0.0/8, 2001:0db8::0/32, 127.0.0.1"
+            }
             upstream-request {
                 filter kind="remove-header-key-regex" pattern=".*(secret|SECRET).*"
                 filter kind="upsert-header" key="x-proxy-friend" value="river"
@@ -202,6 +205,55 @@ Where `KEYKIND` is one of the following:
 ### `services.$NAME.path-control`
 
 This section contains the configuration for path control filters
+
+Each path control filter allows for modification or rejection at different stages of request
+and response handling.
+
+This section is optional.
+
+Example:
+
+```kdl
+path-control {
+    request-filters {
+        filter kind="block-cidr-range" addrs="192.168.0.0/16, 10.0.0.0/8, 2001:0db8::0/32, 127.0.0.1"
+    }
+    upstream-request {
+        filter kind="remove-header-key-regex" pattern=".*(secret|SECRET).*"
+        filter kind="upsert-header" key="x-proxy-friend" value="river"
+    }
+    upstream-response {
+        filter kind="remove-header-key-regex" pattern=".*ETag.*"
+        filter kind="upsert-header" key="x-with-love-from" value="river"
+    }
+}
+```
+
+#### `services.$NAME.path-control.request-filters`
+
+Filters at this stage are the earliest. Currently supported filters:
+
+* `kind = "block-cidr-range"`
+    * Arguments: `addrs = "ADDRS"`, where `ADDRS` is a comma separated list of IPv4 or IPv6 addresses or CIDR address ranges.
+    * Any matching source IP addresses will be rejected with a 400 error code.
+
+#### `services.$NAME.path-control.upstream-request`
+
+* `kind = "remove-header-key-regex"`
+    * Arguments: `pattern = "PATTERN"`, where `PATTERN` is a regular expression matching the key of an HTTP header
+    * Any matching header entry will be removed from the request before forwarding
+* `kind = "upsert-header"`
+    * Arguments: `key="KEY" value="VALUE"`, where `KEY` is a valid HTTP header key, and `VALUE` is a valid HTTP header value
+    * The given header will be added or replaced to `VALUE`
+
+#### `services.$NAME.path-control.upstream-response`
+
+* `kind = "remove-header-key-regex"`
+    * Arguments: `pattern = "PATTERN"`, where `PATTERN` is a regular expression matching the key of an HTTP header
+    * Any matching header entry will be removed from the response before forwarding
+* `kind = "upsert-header"`
+    * Arguments: `key="KEY" value="VALUE"`, where `KEY` is a valid HTTP header key, and `VALUE` is a valid HTTP header value
+    * The given header will be added or replaced to `VALUE`
 
 ### `services.$NAME.file-server`
 
