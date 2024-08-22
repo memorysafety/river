@@ -34,6 +34,7 @@ miette = { version = "5.10.0", features = ["fancy"] }
 thiserror = "1.0.61"
 http = "1.0.0"
 futures-util = "0.3.30"
+cidr = "0.2.3"
 
 [dependencies.static-files-module]
 version = "0.2"

@@ -30,6 +30,9 @@ use crate::{
     },
 };
 
+use self::request_filters::RequestFilterMod;
+
+pub mod request_filters;
 pub mod request_modifiers;
 pub mod request_selector;
 pub mod response_modifiers;
@@ -143,8 +146,11 @@ where
 
 /// All modifiers used when implementing the [ProxyHttp] trait.
 pub struct Modifiers {
+    /// Filters used during the handling of [ProxyHttp::request_filter]
+    pub request_filters: Vec<Box<dyn RequestFilterMod>>,
     /// Filters used during the handling of [ProxyHttp::upstream_request_filter]
     pub upstream_request_filters: Vec<Box<dyn RequestModifyMod>>,
+    /// Filters used during the handling of [ProxyHttp::upstream_response_filter]
     pub upstream_response_filters: Vec<Box<dyn ResponseModifyMod>>,
 }
 
@@ -152,6 +158,21 @@ impl Modifiers {
     /// Build all modifiers from the provided [PathControl]
     pub fn from_conf(conf: &PathControl) -> Result<Self> {
         let mut conf = conf.clone();
+
+        let mut request_filter_mods: Vec<Box<dyn RequestFilterMod>> = vec![];
+        for mut filter in conf.request_filters.drain(..) {
+            let kind = filter.remove("kind").unwrap();
+            let f: Box<dyn RequestFilterMod> = match kind.as_str() {
+                "block-cidr-range" => {
+                    Box::new(request_filters::CidrRangeFilter::from_settings(filter).unwrap())
+                }
+                other => {
+                    tracing::warn!("Unknown request filter: '{other}'");
+                    return Err(Error::new(pingora::ErrorType::Custom("Bad configuration")));
+                },
+            };
+            request_filter_mods.push(f);
+        }
 
         let mut upstream_request_filters: Vec<Box<dyn RequestModifyMod>> = vec![];
         for mut filter in conf.upstream_request_filters.drain(..) {
@@ -163,7 +184,10 @@ impl Modifiers {
                 "upsert-header" => {
                     Box::new(request_modifiers::UpsertHeader::from_settings(filter).unwrap())
                 }
-                _ => panic!(),
+                other => {
+                    tracing::warn!("Unknown upstream request filter: '{other}'");
+                    return Err(Error::new(pingora::ErrorType::Custom("Bad configuration")));
+                },
             };
             upstream_request_filters.push(f);
         }
@@ -178,12 +202,16 @@ impl Modifiers {
                 "upsert-header" => {
                     Box::new(response_modifiers::UpsertHeader::from_settings(filter).unwrap())
                 }
-                _ => panic!(),
+                other => {
+                    tracing::warn!("Unknown upstream response filter: '{other}'");
+                    return Err(Error::new(pingora::ErrorType::Custom("Bad configuration")));
+                },
             };
             upstream_response_filters.push(f);
         }
 
         Ok(Self {
+            request_filters: request_filter_mods,
             upstream_request_filters,
             upstream_response_filters,
         })
@@ -207,6 +235,24 @@ where
         RiverContext {
             selector_buf: Vec::new(),
         }
+    }
+
+    /// Handle the "Request filter" stage
+    async fn request_filter(&self, session: &mut Session, ctx: &mut Self::CTX) -> Result<bool>
+    where
+        Self::CTX: Send + Sync,
+    {
+        for filter in &self.modifiers.request_filters {
+            match filter.request_filter(session, ctx).await {
+                // If Ok true: we're done handling this request
+                o @ Ok(true) => return o,
+                // If Err: we return that
+                e @ Err(_) => return e,
+                // If Ok(false), we move on to the next filter
+                Ok(false) => {},
+            }
+        }
+        Ok(false)
     }
 
     /// Handle the "upstream peer" phase, where we pick which upstream to proxy to.

@@ -160,6 +160,7 @@ impl From<ProxyConfig> for super::internal::ProxyConfig {
 impl From<PathControl> for super::internal::PathControl {
     fn from(value: PathControl) -> Self {
         Self {
+            request_filters: vec![],
             upstream_request_filters: value.upstream_request_filters,
             upstream_response_filters: value.upstream_response_filters,
         }
