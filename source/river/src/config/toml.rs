@@ -362,6 +362,7 @@ pub mod test {
                                 ("value".to_string(), "river".to_string()),
                             ]),
                         ],
+                        request_filters: vec![],
                     },
                     upstream_options: UpstreamOptions::default(),
                 },
@@ -378,6 +379,7 @@ pub mod test {
                     path_control: internal::PathControl {
                         upstream_request_filters: vec![],
                         upstream_response_filters: vec![],
+                        request_filters: vec![],
                     },
                     upstream_options: UpstreamOptions::default(),
                 },
