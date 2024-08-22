@@ -169,7 +169,7 @@ impl Modifiers {
                 other => {
                     tracing::warn!("Unknown request filter: '{other}'");
                     return Err(Error::new(pingora::ErrorType::Custom("Bad configuration")));
-                },
+                }
             };
             request_filter_mods.push(f);
         }
@@ -187,7 +187,7 @@ impl Modifiers {
                 other => {
                     tracing::warn!("Unknown upstream request filter: '{other}'");
                     return Err(Error::new(pingora::ErrorType::Custom("Bad configuration")));
-                },
+                }
             };
             upstream_request_filters.push(f);
         }
@@ -205,7 +205,7 @@ impl Modifiers {
                 other => {
                     tracing::warn!("Unknown upstream response filter: '{other}'");
                     return Err(Error::new(pingora::ErrorType::Custom("Bad configuration")));
-                },
+                }
             };
             upstream_response_filters.push(f);
         }
@@ -249,7 +249,7 @@ where
                 // If Err: we return that
                 e @ Err(_) => return e,
                 // If Ok(false), we move on to the next filter
-                Ok(false) => {},
+                Ok(false) => {}
             }
         }
         Ok(false)
