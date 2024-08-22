@@ -265,6 +265,11 @@ fn extract_service(
     //
     let mut pc = PathControl::default();
     if let Some(pc_node) = utils::optional_child_doc(doc, node, "path-control") {
+        // request-filters (optional)
+        if let Some(ureq_node) = utils::optional_child_doc(doc, pc_node, "request-filters") {
+            pc.request_filters = collect_filters(doc, ureq_node)?;
+        }
+
         // upstream-request (optional)
         if let Some(ureq_node) = utils::optional_child_doc(doc, pc_node, "upstream-request") {
             pc.upstream_request_filters = collect_filters(doc, ureq_node)?;

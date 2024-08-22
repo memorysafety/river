@@ -73,6 +73,13 @@ fn load_test() {
                             ("value".to_string(), "river".to_string()),
                         ]),
                     ],
+                    request_filters: vec![BTreeMap::from([
+                        ("kind".to_string(), "block-cidr-range".to_string()),
+                        (
+                            "addrs".to_string(),
+                            "192.168.0.0/16, 10.0.0.0/8, 2001:0db8::0/32, 127.0.0.1".to_string(),
+                        ),
+                    ])],
                 },
                 upstream_options: UpstreamOptions {
                     selection: crate::config::internal::SelectionKind::Ketama,
@@ -94,6 +101,7 @@ fn load_test() {
                 path_control: crate::config::internal::PathControl {
                     upstream_request_filters: vec![],
                     upstream_response_filters: vec![],
+                    request_filters: vec![],
                 },
                 upstream_options: UpstreamOptions::default(),
             },
