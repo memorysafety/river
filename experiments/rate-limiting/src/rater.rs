@@ -1,16 +1,24 @@
 use std::{sync::Arc, time::Duration};
+use std::hash::Hash;
+use std::fmt::Debug;
 
 use concread::arcache::{ARCache, ARCacheBuilder};
 use leaky_bucket::RateLimiter;
 
-pub struct Rater {
-    cache: ARCache<String, Arc<RateLimiter>>,
+pub struct Rater<Key>
+where
+    Key: Hash + Eq + Ord + Clone + Debug + Sync + Send + 'static,
+{
+    cache: ARCache<Key, Arc<RateLimiter>>,
     max_tokens_per_bucket: usize,
     refill_interval_millis: usize,
     refill_qty: usize,
 }
 
-impl Rater {
+impl<Key> Rater<Key>
+where
+    Key: Hash + Eq + Ord + Clone + Debug + Sync + Send + 'static,
+{
     pub fn new(
         threads: usize,
         max_buckets: usize,
@@ -31,12 +39,12 @@ impl Rater {
         }
     }
 
-    pub fn get_limiter(&self, key: String) -> Arc<RateLimiter> {
+    pub fn get_limiter(&self, key: Key) -> Arc<RateLimiter> {
         let mut reader = self.cache.read();
 
         if let Some(find) = reader.get(&key) {
             // Rate limiter DID exist in the cache
-            tracing::trace!(key, "rate limiting cache hit",);
+            tracing::trace!(?key, "rate limiting cache hit",);
             find.clone()
         } else {
             let new_limiter = Arc::new(
@@ -49,7 +57,7 @@ impl Rater {
                     .build(),
             );
 
-            tracing::debug!(key, "rate limiting cache miss",);
+            tracing::debug!(?key, "rate limiting cache miss",);
             reader.insert(key, new_limiter.clone());
             reader.finish();
             new_limiter
