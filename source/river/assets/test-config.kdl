@@ -87,7 +87,7 @@ services {
         // This section is optional.
         path-control {
             request-filters {
-                filter kind="block-cidr-range" addrs="192.168.0.0/16, 10.0.0.0/8, 2001:0db8::0/32, 127.0.0.1"
+                filter kind="block-cidr-range" addrs="192.168.0.0/16, 10.0.0.0/8, 2001:0db8::0/32"
             }
             upstream-request {
                 filter kind="remove-header-key-regex" pattern=".*(secret|SECRET).*"

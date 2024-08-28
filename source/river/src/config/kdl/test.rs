@@ -81,7 +81,7 @@ fn load_test() {
                         ("kind".to_string(), "block-cidr-range".to_string()),
                         (
                             "addrs".to_string(),
-                            "192.168.0.0/16, 10.0.0.0/8, 2001:0db8::0/32, 127.0.0.1".to_string(),
+                            "192.168.0.0/16, 10.0.0.0/8, 2001:0db8::0/32".to_string(),
                         ),
                     ])],
                 },
