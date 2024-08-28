@@ -10,9 +10,7 @@ use regex::Regex;
 pub enum RequestKeyKind {
     SourceIp,
     DestIp,
-    Uri {
-        pattern: Regex
-    },
+    Uri { pattern: Regex },
 }
 
 impl PartialEq for RequestKeyKind {
@@ -23,7 +21,7 @@ impl PartialEq for RequestKeyKind {
             (Self::Uri { pattern: pattern1 }, Self::Uri { pattern: pattern2 }) => {
                 pattern1.as_str() == pattern2.as_str()
             }
-            _ => false
+            _ => false,
         }
     }
 }
@@ -62,7 +60,7 @@ impl RaterInstance {
                     SocketAddr::Unix(_) => return None,
                 };
                 Some(RequestKey::Source(src_ip))
-            },
+            }
             RequestKeyKind::DestIp => None,
             RequestKeyKind::Uri { pattern } => {
                 let uri_path = session.downstream_session.req_header().uri.path();
@@ -71,7 +69,7 @@ impl RaterInstance {
                 } else {
                     None
                 }
-            },
+            }
         }
     }
 }

@@ -7,7 +7,10 @@ use crate::{
     config::internal::{
         FileServerConfig, ListenerConfig, ListenerKind, ProxyConfig, UpstreamOptions,
     },
-    proxy::{rate_limiting::{RaterConfig, RaterInstanceConfig}, request_selector::uri_path_selector},
+    proxy::{
+        rate_limiting::{RaterConfig, RaterInstanceConfig},
+        request_selector::uri_path_selector,
+    },
 };
 
 #[test]
@@ -91,8 +94,28 @@ fn load_test() {
                 rate_limiting: crate::config::internal::RateLimitingConfig {
                     timeout_ms: Some(100),
                     rules: vec![
-                        RaterInstanceConfig { rater_cfg: RaterConfig { threads: 8, max_buckets: 4000, max_tokens_per_bucket: 10, refill_interval_millis: 10, refill_qty: 1 }, kind: crate::proxy::rate_limiting::RequestKeyKind::SourceIp },
-                        RaterInstanceConfig { rater_cfg: RaterConfig { threads: 8, max_buckets: 2000, max_tokens_per_bucket: 20, refill_interval_millis: 1, refill_qty: 5 }, kind: crate::proxy::rate_limiting::RequestKeyKind::Uri { pattern: Regex::new("static/.*").unwrap() } },
+                        RaterInstanceConfig {
+                            rater_cfg: RaterConfig {
+                                threads: 8,
+                                max_buckets: 4000,
+                                max_tokens_per_bucket: 10,
+                                refill_interval_millis: 10,
+                                refill_qty: 1,
+                            },
+                            kind: crate::proxy::rate_limiting::RequestKeyKind::SourceIp,
+                        },
+                        RaterInstanceConfig {
+                            rater_cfg: RaterConfig {
+                                threads: 8,
+                                max_buckets: 2000,
+                                max_tokens_per_bucket: 20,
+                                refill_interval_millis: 1,
+                                refill_qty: 5,
+                            },
+                            kind: crate::proxy::rate_limiting::RequestKeyKind::Uri {
+                                pattern: Regex::new("static/.*").unwrap(),
+                            },
+                        },
                     ],
                 },
             },
