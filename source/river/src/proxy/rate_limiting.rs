@@ -1,3 +1,9 @@
+//! Rate Limiting
+//!
+//! This is an implementation of request rate limiting.
+//!
+//! See the [`Rater`] structure for more details
+
 use std::{fmt::Debug, hash::Hash, net::IpAddr, sync::Arc, time::Duration};
 
 use concread::arcache::{ARCache, ARCacheBuilder};
