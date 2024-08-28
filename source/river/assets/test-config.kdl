@@ -31,6 +31,41 @@ services {
             "0.0.0.0:4443" cert-path="./assets/test.crt" key-path="./assets/test.key" offer-h2=true
         }
 
+        // Apply Rate limiting to this service
+        //
+        // Note that ALL rules are applied, and a request must receive a token from all
+        // applicable rules.
+        //
+        // For example:
+        //
+        // A request to URI `/index.html` from IP 1.2.3.4 will only need to get a token from
+        // the `source-ip` rule.
+        //
+        // A request to URI `/static/style.css` from IP 1.2.3.4 will need to get a token from
+        // BOTH the `source-ip` rule (from the `1.2.3.4` bucket), AND the `uri` rule (from the
+        // `/static/style.css` bucket)
+        rate-limiting {
+            // If a request takes more than 100ms to obtain all necessary tokens, a 429 error
+            // will be returned
+            timeout millis=100
+
+            // This rate limiting rule is based on the source IP address
+            //
+            // * Up to the last 4000 IP addresses will be remembered
+            // * Each IP address can make a burst of 10 requests
+            // * The bucket for each IP will refill at a rate of 1 request per 10 milliseconds
+            rule kind="source-ip" \
+                max-buckets=4000 tokens-per-bucket=10 refill-qty=1 refill-rate-ms=10
+
+            // This rate limiting is based on the specific URI path
+            //
+            // * Up to the last 2000 URI paths will be remembered
+            // * Each URI path can make a burst of 20 requests
+            // * The bucket for each URI will refill at a rate of 5 requests per 1 millisecond
+            rule kind="uri" pattern="static/.*" \
+                max-buckets=2000 tokens-per-bucket=20 refill-qty=5 refill-rate-ms=1
+        }
+
         // Connectors are the "upstream" interfaces that we connect with. We can name as many
         // as we'd like, at least one is required. By default, connectors are distributed
         // round-robin.

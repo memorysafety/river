@@ -72,7 +72,7 @@ fn extract_services(
     let service_node = utils::required_child_doc(doc, doc, "services")?;
     let services = utils::wildcard_argless_child_docs(doc, service_node)?;
 
-    let proxy_node_set = HashSet::from(["listeners", "connectors", "path-control"]);
+    let proxy_node_set = HashSet::from(["listeners", "connectors", "path-control", "rate-limiting"]);
     let file_server_node_set = HashSet::from(["listeners", "file-server"]);
 
     let mut proxies = vec![];

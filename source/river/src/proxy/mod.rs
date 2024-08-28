@@ -4,12 +4,12 @@
 //! this includes creation of HTTP proxy services, as well as Path Control
 //! modifiers.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::{collections::{BTreeMap, BTreeSet}, time::Duration};
 
 use async_trait::async_trait;
 use futures_util::FutureExt;
 
-use pingora::{server::Server, Error};
+use pingora::{server::Server, Error, ErrorType};
 use pingora_core::{upstreams::peer::HttpPeer, Result};
 use pingora_http::{RequestHeader, ResponseHeader};
 use pingora_load_balancing::{
@@ -20,6 +20,7 @@ use pingora_load_balancing::{
     Backend, Backends, LoadBalancer,
 };
 use pingora_proxy::{ProxyHttp, Session};
+use tokio::task::JoinSet;
 
 use crate::{
     config::internal::{PathControl, ProxyConfig, SelectionKind},
@@ -30,12 +31,18 @@ use crate::{
     },
 };
 
-use self::request_filters::RequestFilterMod;
+use self::{rate_limiting::{RaterInstance, TicketError}, request_filters::RequestFilterMod};
 
+pub mod rate_limiting;
 pub mod request_filters;
 pub mod request_modifiers;
 pub mod request_selector;
 pub mod response_modifiers;
+
+
+pub struct RateLimiters {
+    request_filter_stage: Vec<RaterInstance>,
+}
 
 /// The [RiverProxyService] is intended to capture the behaviors used to extend
 /// the [HttpProxy] functionality by providing a [ProxyHttp] trait implementation.
@@ -50,6 +57,7 @@ pub struct RiverProxyService<BS: BackendSelection> {
     /// Load Balancer
     pub load_balancer: LoadBalancer<BS>,
     pub request_selector: RequestSelector,
+    pub rate_limiters: RateLimiters,
 }
 
 /// Create a proxy service, with the type parameters chosen based on the config file
@@ -106,6 +114,7 @@ where
                 modifiers,
                 load_balancer: upstreams,
                 request_selector: conf.upstream_options.selector,
+                rate_limiters: RateLimiters { request_filter_stage: vec![] },
             },
             &conf.name,
         );
@@ -168,7 +177,7 @@ impl Modifiers {
                 }
                 other => {
                     tracing::warn!("Unknown request filter: '{other}'");
-                    return Err(Error::new(pingora::ErrorType::Custom("Bad configuration")));
+                    return Err(Error::new(ErrorType::Custom("Bad configuration")));
                 }
             };
             request_filter_mods.push(f);
@@ -186,7 +195,7 @@ impl Modifiers {
                 }
                 other => {
                     tracing::warn!("Unknown upstream request filter: '{other}'");
-                    return Err(Error::new(pingora::ErrorType::Custom("Bad configuration")));
+                    return Err(Error::new(ErrorType::Custom("Bad configuration")));
                 }
             };
             upstream_request_filters.push(f);
@@ -204,7 +213,7 @@ impl Modifiers {
                 }
                 other => {
                     tracing::warn!("Unknown upstream response filter: '{other}'");
-                    return Err(Error::new(pingora::ErrorType::Custom("Bad configuration")));
+                    return Err(Error::new(ErrorType::Custom("Bad configuration")));
                 }
             };
             upstream_response_filters.push(f);
@@ -242,6 +251,52 @@ where
     where
         Self::CTX: Send + Sync,
     {
+        // First: do rate limiting at this stage - quickly check if there are none and skip over
+        // entirely if so
+        if !self.rate_limiters.request_filter_stage.is_empty() {
+            // Use a joinset to capture all applicable rate limiters
+            //
+            // TODO: avoid spawning one task per limiter?
+            let mut set: JoinSet<Result<(), TicketError>> = JoinSet::new();
+            for limiter in self.rate_limiters.request_filter_stage.iter() {
+                let ticket = limiter.get_ticket(session);
+                set.spawn(ticket.wait());
+            }
+
+            // This future returns when either ALL tickets have been obtained, OR
+            // when any ticket returns an error
+            let total_ticket_fut = async move {
+                while let Some(res) = set.join_next().await {
+                    match res {
+                        Ok(Ok(())) => {},
+                        Ok(Err(_e)) => return Err(()),
+                        Err(_) => return Err(()),
+                    }
+                }
+                Ok(())
+            };
+
+            // Cap the waiting time in case all buckets are too full
+            //
+            // TODO: This is a workaround for not having the ability to immediately bail
+            // if buckets are "too full"!
+            //
+            // TODO: make this configurable?
+            let res = tokio::time::timeout(Duration::from_secs(1), total_ticket_fut).await;
+            match res {
+                Ok(Ok(())) => {},
+                Ok(Err(())) => {
+                    // Rate limiter said "bail"
+                    return Err(Error::new_down(ErrorType::CustomCode("rate limit exceeded", 429)))
+                }
+                Err(_) => {
+                    // Timeout occurred
+                    return Err(Error::new_down(ErrorType::CustomCode("rate limit exceeded", 429)))
+                }
+            }
+        }
+
+
         for filter in &self.modifiers.request_filters {
             match filter.request_filter(session, ctx).await {
                 // If Ok true: we're done handling this request
