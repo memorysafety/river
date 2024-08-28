@@ -9,19 +9,24 @@ use regex::Regex;
 #[derive(Debug, Clone)]
 pub enum RequestKeyKind {
     SourceIp,
+    #[allow(dead_code)]
     DestIp,
-    Uri { pattern: Regex },
+    Uri {
+        pattern: Regex,
+    },
 }
 
 impl PartialEq for RequestKeyKind {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::SourceIp, Self::SourceIp) => true,
+            (Self::SourceIp, _) => false,
             (Self::DestIp, Self::DestIp) => true,
+            (Self::DestIp, _) => false,
             (Self::Uri { pattern: pattern1 }, Self::Uri { pattern: pattern2 }) => {
                 pattern1.as_str() == pattern2.as_str()
             }
-            _ => false,
+            (Self::Uri { .. }, _) => false,
         }
     }
 }
@@ -29,6 +34,7 @@ impl PartialEq for RequestKeyKind {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum RequestKey {
     Source(IpAddr),
+    #[allow(dead_code)]
     Dest(IpAddr),
     Uri(String),
 }
@@ -243,6 +249,7 @@ where
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug, PartialEq, Clone)]
 pub enum TicketError {
     BurstLimitExceeded,

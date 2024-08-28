@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = [ "experiments/rate-limiting",
+members = [
     "source/river",
 ]
 
