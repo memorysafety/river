@@ -60,7 +60,7 @@ impl RaterInstance {
     pub fn get_key(&self, session: &mut Session) -> Option<RequestKey> {
         match &self.kind {
             RequestKeyKind::SourceIp => {
-                let src = session.downstream_session.client_addr().unwrap();
+                let src = session.downstream_session.client_addr()?;
                 let src_ip = match src {
                     SocketAddr::Inet(addr) => addr.ip(),
                     SocketAddr::Unix(_) => return None,
