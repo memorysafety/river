@@ -97,6 +97,15 @@ services {
                 filter kind="upsert-header" key="x-with-love-from" value="river"
             }
         }
+        rate-limiting {
+            timeout millis=100
+
+            rule kind="source-ip" \
+                max-buckets=4000 tokens-per-bucket=10 refill-qty=1 refill-rate-ms=10
+
+            rule kind="uri" pattern="static/.*" \
+                max-buckets=2000 tokens-per-bucket=20 refill-qty=5 refill-rate-ms=1
+        }
     }
     Example3 {
         listeners {
@@ -254,6 +263,121 @@ Filters at this stage are the earliest. Currently supported filters:
 * `kind = "upsert-header"`
     * Arguments: `key="KEY" value="VALUE"`, where `KEY` is a valid HTTP header key, and `VALUE` is a valid HTTP header value
     * The given header will be added or replaced to `VALUE`
+
+### `services.$NAME.rate-limiting`
+
+This section contains the configuration for rate limiting rules.
+
+Rate limiting rules are used to limit the total number of requests made by downstream clients,
+based on various criteria.
+
+Note that Rate limiting is on a **per service** basis, services do not share rate limiting
+information.
+
+This section is optional.
+
+Example:
+
+```
+rate-limiting {
+    timeout millis=100
+
+    rule kind="source-ip" \
+        max-buckets=4000 tokens-per-bucket=10 refill-qty=1 refill-rate-ms=10
+
+    rule kind="uri" pattern="static/.*" \
+        max-buckets=2000 tokens-per-bucket=20 refill-qty=5 refill-rate-ms=1
+}
+```
+
+#### `services.$NAME.rate-limiting.timeout`
+
+The `timeout` parameter is used to set the total timeout for acquiring all rate limiting tokens.
+
+If acquiring applicable rate limiting tokens takes longer than this time, the request will not be
+forwarded and will respond with a 429 error.
+
+This parameter is mandatory if the `rate-limiting` section is present.
+
+This is specified in the form:
+
+`timeout millis=TIME`, where `TIME` is an unsigned integer
+
+**Implementation Note**: The rate limiting timeout is a temporary implementation detail to limit
+requests from waiting "too long" to obtain their tokens. In the future, it is planned to modify
+the leaky bucket implementation to instead set an upper limit on the maximum "token debt", or
+how many requests are waiting for a token. Instead of waiting and timing out, requests will instead
+be given immediate feedback that the rate limiting is overcongested, and return a 429 error immediately,
+instead of after a given timeout.
+
+When this change occurs, the `timeout` parameter will be deprecated, and replaced with a `max-token-debt`
+parameter instead.
+
+#### `services.$NAME.rate-limiting.rule`
+
+Rules are used to specify rate limiting parameters, and applicability of rules to a given request.
+
+##### Leaky Buckets
+
+Rate limiting in River uses a [Leaky Bucket] model for determining whether a request can be served
+immediately, or if it should be delayed (or rejected). For a given rule, a "bucket" of "tokens"
+is created, where one "token" is required for each request.
+
+The bucket for a rule starts with a configurable `tokens-per-bucket` number. When a request arrives,
+it attempts to take one token from the bucket. If one is available, it is served immediately. Otherwise,
+the request waits in a first-in, first-out order for a token to become available.
+
+The bucket is refilled at a configurable rate, specified by `refill-rate-ms`, and adds a configurable
+number of tokens specified by `refill-qty`. The number of tokens in the bucket will never exceed the
+initial `tokens-per-bucket` number.
+
+Once a refill occurs, requests may become ready if a token becomes available.
+
+[Leaky Bucket]: https://en.wikipedia.org/wiki/Leaky_bucket
+
+##### How many buckets?
+
+Some rules require many buckets. For example, rules based on the source IP address will create a bucket
+for each unique IP address of downstream users.
+
+However, each of these buckets require space to contain the metadata, and to avoid unbounded growth,
+we allow for a configurable `max-buckets` number, which serves to influence the total memory required
+for storing buckets. This uses an [Adaptive Replacement Cache]
+to allow for concurrent access to these buckets, as well as the ability to automatically buckets that
+are not actively being used (somewhat similar to an LRU or "Least Recently Used" cache).
+
+[Adaptive Replacement Cache]: https://docs.rs/concread/latest/concread/arcache/index.html
+
+There is a trade off here: The larger `max-buckets` is, the longer that River can "remember" a bucket
+for a given factor, such as specific IP addresses. However, it also requires more resident memory to
+retain this information.
+
+If `max-buckets` is set too low, then buckets will be "evicted" from the cache, meaning that subsequent
+requests matching that bucket will require the creation of a new bucket (with a full set of tokens),
+potentially defeating the objective of accurate rate limiting.
+
+##### Gotta claim 'em all
+
+When multiple rules apply to a single request, for example rules based on both source IP address,
+and the URI path, then a request must claim ALL applicable tokens before proceeding. If a given IP
+address is making it's first request, but to a URI that that has an empty bucket, it will immediately
+obtain the IP address token, but be forced to wait until the URI token has been claimed
+
+##### Kinds of Rules
+
+Currently two kinds of rules are supported:
+
+* `kind="source-ip"` - this tracks the IP address of the requestor. A unique bucket will be created for
+  the IPv4 or IPv6 address of the requestor.
+* `kind="uri" pattern="REGEX"` - This tracks the URI path of the request, such as `static/images/example.jpg`
+    * If the request's URI path matches the provided `REGEX`, the full URI path will be assigned to a given
+      bucket
+    * For example, if the regex `static/.*` was provided:
+        * `index.html` would not match this rule, and would not require obtaining a token
+        * `static/images/example.jpg` would match this rule, and would require obtaining a token
+        * `static/styles/example.css` would also match this rule, and would require obtaining a token
+        * Note that `static/images/example.jpg` and `static/styles/example.css` would each have a UNIQUE
+          bucket.
 
 ### `services.$NAME.file-server`
 
