@@ -80,6 +80,15 @@ where
     refill_qty: usize,
 }
 
+impl<Key> Debug for Rater<Key>
+where
+    Key: Hash + Eq + Ord + Clone + Debug + Sync + Send + 'static,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Rater { ... }")
+    }
+}
+
 impl<Key> Rater<Key>
 where
     Key: Hash + Eq + Ord + Clone + Debug + Sync + Send + 'static,

@@ -8,7 +8,7 @@ use std::{
 use pingora::upstreams::peer::HttpPeer;
 use serde::{Deserialize, Serialize};
 
-use super::internal::UpstreamOptions;
+use super::internal::{RateLimitingConfig, UpstreamOptions};
 
 /// Configuration used for TOML formatted files
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
@@ -153,6 +153,7 @@ impl From<ProxyConfig> for super::internal::ProxyConfig {
             upstreams: vec![other.connector.into()],
             path_control: other.path_control.into(),
             upstream_options: UpstreamOptions::default(),
+            rate_limiting: RateLimitingConfig::default(),
         }
     }
 }

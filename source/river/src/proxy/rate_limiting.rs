@@ -4,12 +4,28 @@ use concread::arcache::{ARCache, ARCacheBuilder};
 use leaky_bucket::RateLimiter;
 use pandora_module_utils::pingora::SocketAddr;
 use pingora_proxy::Session;
+use regex::Regex;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone)]
 pub enum RequestKeyKind {
     SourceIp,
     DestIp,
-    Uri,
+    Uri {
+        pattern: Regex
+    },
+}
+
+impl PartialEq for RequestKeyKind {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::SourceIp, Self::SourceIp) => true,
+            (Self::DestIp, Self::DestIp) => true,
+            (Self::Uri { pattern: pattern1 }, Self::Uri { pattern: pattern2 }) => {
+                pattern1.as_str() == pattern2.as_str()
+            }
+            _ => false
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -19,31 +35,42 @@ pub enum RequestKey {
     Uri(String),
 }
 
+#[derive(Debug)]
 pub struct RaterInstance {
     pub rater: Rater<RequestKey>,
     pub kind: RequestKeyKind,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct RaterInstanceConfig {
+    pub rater_cfg: RaterConfig,
+    pub kind: RequestKeyKind,
+}
+
 impl RaterInstance {
-    pub fn get_ticket(&self, session: &mut Session) -> Ticket {
-        let key = self.get_key(session);
-        self.rater.get_ticket(key)
+    pub fn get_ticket(&self, session: &mut Session) -> Option<Ticket> {
+        let key = self.get_key(session)?;
+        Some(self.rater.get_ticket(key))
     }
 
-    pub fn get_key(&self, session: &mut Session) -> RequestKey {
-        match self.kind {
+    pub fn get_key(&self, session: &mut Session) -> Option<RequestKey> {
+        match &self.kind {
             RequestKeyKind::SourceIp => {
                 let src = session.downstream_session.client_addr().unwrap();
                 let src_ip = match src {
                     SocketAddr::Inet(addr) => addr.ip(),
-                    SocketAddr::Unix(_) => todo!(),
+                    SocketAddr::Unix(_) => return None,
                 };
-                RequestKey::Source(src_ip)
+                Some(RequestKey::Source(src_ip))
             },
-            RequestKeyKind::DestIp => todo!(),
-            RequestKeyKind::Uri => {
-                let uri = session.downstream_session.req_header().uri.to_string();
-                RequestKey::Uri(uri)
+            RequestKeyKind::DestIp => None,
+            RequestKeyKind::Uri { pattern } => {
+                let uri_path = session.downstream_session.req_header().uri.path();
+                if pattern.is_match(uri_path) {
+                    Some(RequestKey::Uri(uri_path.to_string()))
+                } else {
+                    None
+                }
             },
         }
     }
@@ -124,6 +151,15 @@ where
     max_tokens_per_bucket: usize,
     refill_interval_millis: usize,
     refill_qty: usize,
+}
+
+impl<Key> Debug for Rater<Key>
+where
+    Key: Hash + Eq + Ord + Clone + Debug + Sync + Send + 'static,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Rater { ... }")
+    }
 }
 
 impl<Key> Rater<Key>

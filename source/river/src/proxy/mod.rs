@@ -4,7 +4,10 @@
 //! this includes creation of HTTP proxy services, as well as Path Control
 //! modifiers.
 
-use std::{collections::{BTreeMap, BTreeSet}, time::Duration};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    time::Duration,
+};
 
 use async_trait::async_trait;
 use futures_util::FutureExt;
@@ -31,14 +34,16 @@ use crate::{
     },
 };
 
-use self::{rate_limiting::{RaterInstance, TicketError}, request_filters::RequestFilterMod};
+use self::{
+    rate_limiting::{Rater, RaterInstance, RequestKeyKind, TicketError},
+    request_filters::RequestFilterMod,
+};
 
 pub mod rate_limiting;
 pub mod request_filters;
 pub mod request_modifiers;
 pub mod request_selector;
 pub mod response_modifiers;
-
 
 pub struct RateLimiters {
     request_filter_stage: Vec<RaterInstance>,
@@ -57,6 +62,7 @@ pub struct RiverProxyService<BS: BackendSelection> {
     /// Load Balancer
     pub load_balancer: LoadBalancer<BS>,
     pub request_selector: RequestSelector,
+    pub rate_limiting_timeout: Duration,
     pub rate_limiters: RateLimiters,
 }
 
@@ -108,13 +114,35 @@ where
             .expect("static should not error");
         // end of TODO
 
+        let request_filter_stage = conf
+            .rate_limiting
+            .rules
+            .iter()
+            .filter_map(|cfg| match &cfg.kind {
+                yes @ RequestKeyKind::SourceIp | yes @ RequestKeyKind::Uri { .. } => {
+                    Some(RaterInstance {
+                        rater: Rater::new(cfg.rater_cfg.clone()),
+                        kind: yes.clone(),
+                    })
+                }
+                RequestKeyKind::DestIp => None,
+            })
+            .collect();
+
         let mut my_proxy = pingora_proxy::http_proxy_service_with_name(
             &server.configuration,
             Self {
                 modifiers,
                 load_balancer: upstreams,
                 request_selector: conf.upstream_options.selector,
-                rate_limiters: RateLimiters { request_filter_stage: vec![] },
+                rate_limiting_timeout: conf
+                    .rate_limiting
+                    .timeout_ms
+                    .map(|v| Duration::from_millis(v as u64))
+                    .unwrap_or(Duration::from_secs(1)),
+                rate_limiters: RateLimiters {
+                    request_filter_stage,
+                },
             },
             &conf.name,
         );
@@ -259,8 +287,9 @@ where
             // TODO: avoid spawning one task per limiter?
             let mut set: JoinSet<Result<(), TicketError>> = JoinSet::new();
             for limiter in self.rate_limiters.request_filter_stage.iter() {
-                let ticket = limiter.get_ticket(session);
-                set.spawn(ticket.wait());
+                if let Some(ticket) = limiter.get_ticket(session) {
+                    set.spawn(ticket.wait());
+                }
             }
 
             // This future returns when either ALL tickets have been obtained, OR
@@ -268,7 +297,7 @@ where
             let total_ticket_fut = async move {
                 while let Some(res) = set.join_next().await {
                     match res {
-                        Ok(Ok(())) => {},
+                        Ok(Ok(())) => {}
                         Ok(Err(_e)) => return Err(()),
                         Err(_) => return Err(()),
                     }
@@ -280,22 +309,23 @@ where
             //
             // TODO: This is a workaround for not having the ability to immediately bail
             // if buckets are "too full"!
-            //
-            // TODO: make this configurable?
-            let res = tokio::time::timeout(Duration::from_secs(1), total_ticket_fut).await;
+            let res = tokio::time::timeout(self.rate_limiting_timeout, total_ticket_fut).await;
             match res {
-                Ok(Ok(())) => {},
+                Ok(Ok(())) => {
+                    // Rate limiter completed!
+                }
                 Ok(Err(())) => {
-                    // Rate limiter said "bail"
-                    return Err(Error::new_down(ErrorType::CustomCode("rate limit exceeded", 429)))
+                    tracing::trace!("Rejecting due to rate limiting failure");
+                    session.downstream_session.respond_error(429).await;
+                    return Ok(true);
                 }
                 Err(_) => {
-                    // Timeout occurred
-                    return Err(Error::new_down(ErrorType::CustomCode("rate limit exceeded", 429)))
+                    tracing::trace!("Rejecting due to rate limiting timeout");
+                    session.downstream_session.respond_error(429).await;
+                    return Ok(true);
                 }
             }
         }
-
 
         for filter in &self.modifiers.request_filters {
             match filter.request_filter(session, ctx).await {

@@ -50,7 +50,8 @@ impl RequestFilterMod for CidrRangeFilter {
     async fn request_filter(&self, session: &mut Session, _ctx: &mut RiverContext) -> Result<bool> {
         let Some(addr) = session.downstream_session.client_addr() else {
             // Unable to determine source address, assuming it should be blocked
-            return Err(Error::new_down(ErrorType::Custom("Missing Client Address")));
+            session.downstream_session.respond_error(401).await;
+            return Ok(true);
         };
         let SocketAddr::Inet(addr) = addr else {
             // CIDR filters don't apply to UDS
@@ -59,7 +60,8 @@ impl RequestFilterMod for CidrRangeFilter {
         let ip_addr = addr.ip();
 
         if self.blocks.iter().any(|b| b.contains(&ip_addr)) {
-            Err(Error::new_down(ErrorType::ConnectRefused))
+            session.downstream_session.respond_error(401).await;
+            Ok(true)
         } else {
             Ok(false)
         }
