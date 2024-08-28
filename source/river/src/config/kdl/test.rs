@@ -1,12 +1,13 @@
 use std::{collections::BTreeMap, net::SocketAddr};
 
 use pingora::upstreams::peer::HttpPeer;
+use regex::Regex;
 
 use crate::{
     config::internal::{
         FileServerConfig, ListenerConfig, ListenerKind, ProxyConfig, UpstreamOptions,
     },
-    proxy::request_selector::uri_path_selector,
+    proxy::{rate_limiting::{RaterConfig, RaterInstanceConfig}, request_selector::uri_path_selector},
 };
 
 #[test]
@@ -87,6 +88,13 @@ fn load_test() {
                     health_checks: crate::config::internal::HealthCheckKind::None,
                     discovery: crate::config::internal::DiscoveryKind::Static,
                 },
+                rate_limiting: crate::config::internal::RateLimitingConfig {
+                    timeout_ms: Some(100),
+                    rules: vec![
+                        RaterInstanceConfig { rater_cfg: RaterConfig { threads: 8, max_buckets: 4000, max_tokens_per_bucket: 10, refill_interval_millis: 10, refill_qty: 1 }, kind: crate::proxy::rate_limiting::RequestKeyKind::SourceIp },
+                        RaterInstanceConfig { rater_cfg: RaterConfig { threads: 8, max_buckets: 2000, max_tokens_per_bucket: 20, refill_interval_millis: 1, refill_qty: 5 }, kind: crate::proxy::rate_limiting::RequestKeyKind::Uri { pattern: Regex::new("static/.*").unwrap() } },
+                    ],
+                },
             },
             ProxyConfig {
                 name: "Example2".into(),
@@ -104,6 +112,10 @@ fn load_test() {
                     request_filters: vec![],
                 },
                 upstream_options: UpstreamOptions::default(),
+                rate_limiting: crate::config::internal::RateLimitingConfig {
+                    timeout_ms: None,
+                    rules: vec![],
+                },
             },
         ],
         file_servers: vec![FileServerConfig {
@@ -147,6 +159,7 @@ fn load_test() {
             upstream_options,
             upstreams,
             path_control,
+            rate_limiting,
         } = abp;
         assert_eq!(*name, ebp.name);
         assert_eq!(*listeners, ebp.listeners);
@@ -160,6 +173,7 @@ fn load_test() {
                 assert_eq!(a.sni, e.sni);
             });
         assert_eq!(*path_control, ebp.path_control);
+        assert_eq!(*rate_limiting, ebp.rate_limiting);
     }
 
     for (afs, efs) in val.file_servers.iter().zip(expected.file_servers.iter()) {

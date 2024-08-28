@@ -206,7 +206,7 @@ pub mod test {
 
     use crate::config::{
         apply_toml,
-        internal::{self, UpstreamOptions},
+        internal::{self, RateLimitingConfig, UpstreamOptions},
         toml::{ConnectorConfig, ListenerConfig, ProxyConfig, System},
     };
 
@@ -366,6 +366,7 @@ pub mod test {
                         request_filters: vec![],
                     },
                     upstream_options: UpstreamOptions::default(),
+                    rate_limiting: RateLimitingConfig::default(),
                 },
                 internal::ProxyConfig {
                     name: "Example2".into(),
@@ -383,6 +384,7 @@ pub mod test {
                         request_filters: vec![],
                     },
                     upstream_options: UpstreamOptions::default(),
+                    rate_limiting: RateLimitingConfig::default(),
                 },
             ],
             file_servers: Vec::new(),

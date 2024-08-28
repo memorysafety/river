@@ -15,7 +15,7 @@ use crate::{
         PathControl, ProxyConfig, SelectionKind, TlsConfig, UpstreamOptions,
     },
     proxy::{
-        rate_limiting::{Rater, RaterConfig, RaterInstance, RaterInstanceConfig, RequestKeyKind},
+        rate_limiting::{RaterConfig, RaterInstanceConfig, RequestKeyKind},
         request_selector::{
             null_selector, source_addr_and_uri_path_selector, uri_path_selector, RequestSelector,
         },
@@ -331,7 +331,8 @@ fn extract_service(
                         .iter()
                         .map(|(k, v)| (*k, v.value()))
                         .collect::<BTreeMap<&str, &KdlValue>>();
-                    rl.rules.push(make_rate_limiter(threads_per_service, doc, node, valslice)?);
+                    rl.rules
+                        .push(make_rate_limiter(threads_per_service, doc, node, valslice)?);
                 }
                 other => {
                     return Err(
@@ -340,7 +341,6 @@ fn extract_service(
                 }
             }
         }
-
     }
 
     Ok(ProxyConfig {
