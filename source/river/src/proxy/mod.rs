@@ -4,10 +4,7 @@
 //! this includes creation of HTTP proxy services, as well as Path Control
 //! modifiers.
 
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    time::Duration,
-};
+use std::collections::{BTreeMap, BTreeSet};
 
 use async_trait::async_trait;
 use futures_util::FutureExt;
@@ -23,7 +20,6 @@ use pingora_load_balancing::{
     Backend, Backends, LoadBalancer,
 };
 use pingora_proxy::{ProxyHttp, Session};
-use tokio::task::JoinSet;
 
 use crate::{
     config::internal::{PathControl, ProxyConfig, SelectionKind},
@@ -35,7 +31,7 @@ use crate::{
 };
 
 use self::{
-    rate_limiting::{Rater, RaterInstance, RequestKeyKind, TicketError},
+    rate_limiting::{Rater, RaterInstance, RequestKeyKind},
     request_filters::RequestFilterMod,
 };
 
@@ -62,7 +58,6 @@ pub struct RiverProxyService<BS: BackendSelection> {
     /// Load Balancer
     pub load_balancer: LoadBalancer<BS>,
     pub request_selector: RequestSelector,
-    pub rate_limiting_timeout: Duration,
     pub rate_limiters: RateLimiters,
 }
 
@@ -135,11 +130,6 @@ where
                 modifiers,
                 load_balancer: upstreams,
                 request_selector: conf.upstream_options.selector,
-                rate_limiting_timeout: conf
-                    .rate_limiting
-                    .timeout_ms
-                    .map(|v| Duration::from_millis(v as u64))
-                    .unwrap_or(Duration::from_secs(1)),
                 rate_limiters: RateLimiters {
                     request_filter_stage,
                 },
@@ -282,47 +272,30 @@ where
         // First: do rate limiting at this stage - quickly check if there are none and skip over
         // entirely if so
         if !self.rate_limiters.request_filter_stage.is_empty() {
-            // Use a joinset to capture all applicable rate limiters
+            // Attempt to get all tokens
             //
-            // TODO: avoid spawning one task per limiter?
-            let mut set: JoinSet<Result<(), TicketError>> = JoinSet::new();
+            // TODO: If https://github.com/udoprog/leaky-bucket/issues/17 is resolved we could
+            // remember the buckets that we did get approved for, and "return" the unused tokens.
+            //
+            // For now, if some tickets succeed but subsequent tickets fail, the preceeding
+            // approved tokens are just "burned".
+            //
+            // TODO: If https://github.com/udoprog/leaky-bucket/issues/34 is resolved we could
+            // support a "max debt" number, allowing us to delay if acquisition of the token
+            // would happen soon-ish, instead of immediately 429-ing if the token we need is
+            // about to become available.
             for limiter in self.rate_limiters.request_filter_stage.iter() {
                 if let Some(ticket) = limiter.get_ticket(session) {
-                    set.spawn(ticket.wait());
-                }
-            }
-
-            // This future returns when either ALL tickets have been obtained, OR
-            // when any ticket returns an error
-            let total_ticket_fut = async move {
-                while let Some(res) = set.join_next().await {
-                    match res {
-                        Ok(Ok(())) => {}
-                        Ok(Err(_e)) => return Err(()),
-                        Err(_) => return Err(()),
+                    match ticket.now_or_never() {
+                        rate_limiting::Outcome::Approved => {
+                            // Approved, move on
+                        }
+                        rate_limiting::Outcome::Declined => {
+                            tracing::trace!("Rejecting due to rate limiting failure");
+                            session.downstream_session.respond_error(429).await;
+                            return Ok(true);
+                        }
                     }
-                }
-                Ok(())
-            };
-
-            // Cap the waiting time in case all buckets are too full
-            //
-            // TODO: This is a workaround for not having the ability to immediately bail
-            // if buckets are "too full"!
-            let res = tokio::time::timeout(self.rate_limiting_timeout, total_ticket_fut).await;
-            match res {
-                Ok(Ok(())) => {
-                    // Rate limiter completed!
-                }
-                Ok(Err(())) => {
-                    tracing::trace!("Rejecting due to rate limiting failure");
-                    session.downstream_session.respond_error(429).await;
-                    return Ok(true);
-                }
-                Err(_) => {
-                    tracing::trace!("Rejecting due to rate limiting timeout");
-                    session.downstream_session.respond_error(429).await;
-                    return Ok(true);
                 }
             }
         }

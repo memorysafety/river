@@ -115,7 +115,6 @@ impl Config {
 ///
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct RateLimitingConfig {
-    pub(crate) timeout_ms: Option<usize>,
     pub(crate) rules: Vec<RaterInstanceConfig>,
 }
 

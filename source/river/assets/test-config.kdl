@@ -45,10 +45,6 @@ services {
         // BOTH the `source-ip` rule (from the `1.2.3.4` bucket), AND the `uri` rule (from the
         // `/static/style.css` bucket)
         rate-limiting {
-            // If a request takes more than 100ms to obtain all necessary tokens, a 429 error
-            // will be returned
-            timeout millis=100
-
             // This rate limiting rule is based on the source IP address
             //
             // * Up to the last 4000 IP addresses will be remembered

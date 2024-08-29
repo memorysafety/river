@@ -8,7 +8,7 @@ use crate::{
         FileServerConfig, ListenerConfig, ListenerKind, ProxyConfig, UpstreamOptions,
     },
     proxy::{
-        rate_limiting::{RaterConfig, RaterInstanceConfig},
+        rate_limiting::{RaterConfig, RaterInstanceConfig, RegexShim},
         request_selector::uri_path_selector,
     },
 };
@@ -92,7 +92,6 @@ fn load_test() {
                     discovery: crate::config::internal::DiscoveryKind::Static,
                 },
                 rate_limiting: crate::config::internal::RateLimitingConfig {
-                    timeout_ms: Some(100),
                     rules: vec![
                         RaterInstanceConfig {
                             rater_cfg: RaterConfig {
@@ -113,7 +112,7 @@ fn load_test() {
                                 refill_qty: 5,
                             },
                             kind: crate::proxy::rate_limiting::RequestKeyKind::Uri {
-                                pattern: Regex::new("static/.*").unwrap(),
+                                pattern: RegexShim::new("static/.*").unwrap(),
                             },
                         },
                     ],
@@ -136,7 +135,6 @@ fn load_test() {
                 },
                 upstream_options: UpstreamOptions::default(),
                 rate_limiting: crate::config::internal::RateLimitingConfig {
-                    timeout_ms: None,
                     rules: vec![],
                 },
             },

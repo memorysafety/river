@@ -4,7 +4,7 @@
 //!
 //! See the [`Rater`] structure for more details
 
-use std::{fmt::Debug, hash::Hash, net::IpAddr, sync::Arc, time::Duration};
+use std::{fmt::Debug, hash::Hash, net::IpAddr, ops::Deref, sync::Arc, time::Duration};
 
 use concread::arcache::{ARCache, ARCacheBuilder};
 use leaky_bucket::RateLimiter;
@@ -12,28 +12,36 @@ use pandora_module_utils::pingora::SocketAddr;
 use pingora_proxy::Session;
 use regex::Regex;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum RequestKeyKind {
     SourceIp,
     #[allow(dead_code)]
     DestIp,
     Uri {
-        pattern: Regex,
+        pattern: RegexShim,
     },
 }
 
-impl PartialEq for RequestKeyKind {
+#[derive(Debug, Clone)]
+pub struct RegexShim(pub Regex);
+
+impl PartialEq for RegexShim {
     fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::SourceIp, Self::SourceIp) => true,
-            (Self::SourceIp, _) => false,
-            (Self::DestIp, Self::DestIp) => true,
-            (Self::DestIp, _) => false,
-            (Self::Uri { pattern: pattern1 }, Self::Uri { pattern: pattern2 }) => {
-                pattern1.as_str() == pattern2.as_str()
-            }
-            (Self::Uri { .. }, _) => false,
-        }
+        self.0.as_str().eq(other.0.as_str())
+    }
+}
+
+impl Deref for RegexShim {
+    type Target = Regex;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl RegexShim {
+    pub fn new(pattern: &str) -> Result<Self, regex::Error> {
+        Ok(Self(Regex::new(pattern)?))
     }
 }
 
@@ -55,6 +63,12 @@ pub struct RaterInstance {
 pub struct RaterInstanceConfig {
     pub rater_cfg: RaterConfig,
     pub kind: RequestKeyKind,
+}
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum Outcome {
+    Approved,
+    Declined,
 }
 
 impl RaterInstance {
@@ -271,37 +285,21 @@ pub struct Ticket {
 }
 
 impl Ticket {
-    /// Wait for our "turn" granted by the leaky bucket
-    ///
-    /// * If the bucket has a token available, `Ok(())` will be returned immediately
-    /// * If the bucket does not have a token available, this function will yield until
-    ///   a token is refilled
-    /// * If the bucket has too many pending waiters, then `Err(TicketError)` will be
-    ///   returned immediately
-    ///
-    /// NOTE: In the future, we would like to be able to return immediately if there
-    /// are too many pending requests at once, instead of queueing requests that are
-    /// going to end up timing out anyway.
-    ///
-    /// However, this is not supported by the [`leaky-bucket`] crate today, enqueueing
-    /// will always succeed, and we will handle this one layer up by adding a timeout
-    /// to requests.
-    ///
-    /// This should be fixed in the future as a performance optimization, but for now
-    /// we give ourselves the API surface to make this change with minimal fuss in
-    /// in the future.
-    pub async fn wait(self) -> Result<(), TicketError> {
-        self.limiter.acquire_owned(1).await;
-        Ok(())
+    /// Try to get a token immediately from the bucket.
+    pub fn now_or_never(self) -> Outcome {
+        if self.limiter.try_acquire(1) {
+            Outcome::Approved
+        } else {
+            Outcome::Declined
+        }
     }
 }
 
 #[cfg(test)]
 mod test {
-    use tokio::sync::mpsc::channel;
-
     use super::*;
-    use std::{ops::Add, time::Instant};
+    use std::time::Instant;
+    use tokio::time::interval;
 
     #[tokio::test]
     async fn smoke() {
@@ -314,102 +312,32 @@ mod test {
             refill_qty: 1,
         };
 
-        let rater = Arc::new(Rater::new(config));
-
+        let rater = Arc::new(Rater::new(config.clone()));
+        let mut sleeper = interval(Duration::from_millis(6));
+        let start = Instant::now();
+        let mut approved = 0;
         for i in 0..100 {
-            let start = Instant::now();
-            let bucket = rater.get_ticket("bob".to_string());
-            bucket.wait().await.unwrap();
-            tracing::info!("Success {i} took {:?}!", start.elapsed());
-        }
-    }
+            sleeper.tick().await;
+            let ticket = rater.get_ticket("bob".to_string());
 
-    #[tokio::test]
-    async fn concurrent_fewer() {
-        let _ = tracing_subscriber::fmt::try_init();
-        let config = RaterConfig {
-            threads: 8,
-            max_buckets: 16,
-            max_tokens_per_bucket: 3,
-            refill_interval_millis: 10,
-            refill_qty: 1,
-        };
-        let rater = Arc::new(Rater::new(config));
-        let mut handles = vec![];
-
-        for thread in 0..8 {
-            let rater = rater.clone();
-            let hdl = tokio::task::spawn(async move {
-                for i in 1..32 {
-                    let name = fizzbuzz(i);
-                    let start = Instant::now();
-                    let bucket = rater.get_ticket(name.clone());
-                    bucket.wait().await.unwrap();
-                    tracing::info!("{thread}:{i}:{name} took {:?}!", start.elapsed());
+            match ticket.now_or_never() {
+                Outcome::Approved => {
+                    approved += 1;
+                    tracing::info!("Approved {i}!")
                 }
-            });
-            handles.push(hdl);
+                Outcome::Declined => tracing::info!("Declined {i}!"),
+            }
         }
+        let duration = start.elapsed();
+        let duration = duration.as_secs_f64();
+        let approved = approved as f64;
 
-        for h in handles.into_iter() {
-            h.await.unwrap();
-        }
-    }
+        let expected_rate = 1000.0f64 / config.refill_interval_millis as f64;
+        let expected_ttl = (duration * expected_rate) + config.max_tokens_per_bucket as f64;
 
-    #[tokio::test]
-    async fn concurrent_more() {
-        let _ = tracing_subscriber::fmt::try_init();
-        let config = RaterConfig {
-            threads: 8,
-            max_buckets: 128,
-            max_tokens_per_bucket: 3,
-            refill_interval_millis: 10,
-            refill_qty: 1,
-        };
-        let rater = Arc::new(Rater::new(config));
-        let (htx, mut hrx) = channel(1024);
-        let deadline = Instant::now().add(Duration::from_millis(10));
-
-        for thread in 0..8 {
-            let rater = rater.clone();
-            let htxin = htx.clone();
-            let hdl = tokio::task::spawn(async move {
-                for i in 1..32 {
-                    let name = fizzbuzz(i);
-                    let rater = rater.clone();
-                    let hdl = tokio::task::spawn(async move {
-                        tokio::time::sleep_until(deadline.into()).await;
-                        let start = Instant::now();
-                        let bucket = rater.get_ticket(name.clone());
-                        let res =
-                            tokio::time::timeout(Duration::from_millis(100), bucket.wait()).await;
-                        match res {
-                            Ok(Ok(())) => {
-                                tracing::info!("{thread}:{i}:{name} took {:?}!", start.elapsed())
-                            }
-                            Ok(Err(_)) => unreachable!(),
-                            Err(_) => tracing::warn!("{thread}:{i}:{name} gave up after 100ms!"),
-                        }
-                    });
-                    htxin.send(hdl).await.unwrap();
-                }
-                drop(htxin);
-            });
-            htx.send(hdl).await.unwrap();
-        }
-        drop(htx);
-
-        while let Some(hdl) = hrx.recv().await {
-            hdl.await.unwrap();
-        }
-    }
-
-    fn fizzbuzz(i: usize) -> String {
-        match i {
-            i if i % 15 == 0 => "fizzbuzz".to_string(),
-            i if i % 3 == 0 => "fizz".to_string(),
-            i if i % 5 == 0 => "buzz".to_string(),
-            i => format!("{i}"),
-        }
+        // Did we get +/-10% of the expected number of approvals?
+        tracing::info!(expected_ttl, actual_ttl = approved, "Rates");
+        assert!(approved > (expected_ttl * 0.9f64));
+        assert!(approved < (expected_ttl * 1.1f64));
     }
 }

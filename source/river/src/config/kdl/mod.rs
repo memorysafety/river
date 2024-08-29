@@ -4,23 +4,21 @@ use std::{
     path::PathBuf,
 };
 
-use kdl::{KdlDocument, KdlEntry, KdlNode, KdlValue};
-use miette::{bail, Diagnostic, SourceSpan};
-use pingora::{protocols::ALPN, upstreams::peer::HttpPeer};
-use regex::Regex;
-
 use crate::{
     config::internal::{
         Config, DiscoveryKind, FileServerConfig, HealthCheckKind, ListenerConfig, ListenerKind,
         PathControl, ProxyConfig, SelectionKind, TlsConfig, UpstreamOptions,
     },
     proxy::{
-        rate_limiting::{RaterConfig, RaterInstanceConfig, RequestKeyKind},
+        rate_limiting::{RaterConfig, RaterInstanceConfig, RegexShim, RequestKeyKind},
         request_selector::{
             null_selector, source_addr_and_uri_path_selector, uri_path_selector, RequestSelector,
         },
     },
 };
+use kdl::{KdlDocument, KdlEntry, KdlNode, KdlValue};
+use miette::{bail, Diagnostic, SourceSpan};
+use pingora::{protocols::ALPN, upstreams::peer::HttpPeer};
 
 use super::internal::RateLimitingConfig;
 
@@ -295,50 +293,18 @@ fn extract_service(
     if let Some(rl_node) = utils::optional_child_doc(doc, node, "rate-limiting") {
         let nodes = utils::data_nodes(doc, rl_node)?;
         for (node, name, args) in nodes.iter() {
-            match *name {
-                "timeout" => {
-                    let vals = utils::str_value_args(doc, args)?;
-                    let [("millis", val)] = vals.as_slice() else {
-                        return Err(Bad::docspan(
-                            "Unknown argument, missing 'millis'",
-                            doc,
-                            node.span(),
-                        )
-                        .into());
-                    };
-                    let Some(millis) = val.value().as_i64().and_then(|v| usize::try_from(v).ok())
-                    else {
-                        return Err(Bad::docspan(
-                            "'millis' value should be a number",
-                            doc,
-                            node.span(),
-                        )
-                        .into());
-                    };
-                    let old = rl.timeout_ms.replace(millis);
-                    if old.is_some() {
-                        return Err(Bad::docspan(
-                            "Can't specify 'timeout' twice!",
-                            doc,
-                            node.span(),
-                        )
-                        .into());
-                    }
-                }
-                "rule" => {
-                    let vals = utils::str_value_args(doc, args)?;
-                    let valslice = vals
-                        .iter()
-                        .map(|(k, v)| (*k, v.value()))
-                        .collect::<BTreeMap<&str, &KdlValue>>();
-                    rl.rules
-                        .push(make_rate_limiter(threads_per_service, doc, node, valslice)?);
-                }
-                other => {
-                    return Err(
-                        Bad::docspan(format!("Unknown name: '{other}'"), doc, node.span()).into(),
-                    );
-                }
+            if *name == "rule" {
+                let vals = utils::str_value_args(doc, args)?;
+                let valslice = vals
+                    .iter()
+                    .map(|(k, v)| (*k, v.value()))
+                    .collect::<BTreeMap<&str, &KdlValue>>();
+                rl.rules
+                    .push(make_rate_limiter(threads_per_service, doc, node, valslice)?);
+            } else {
+                return Err(
+                    Bad::docspan(format!("Unknown name: '{name}'"), doc, node.span()).into(),
+                );
             }
         }
     }
@@ -413,7 +379,7 @@ fn make_rate_limiter(
         }),
         "uri" => {
             let pattern = take_str("pattern")?;
-            let Ok(pattern) = Regex::new(pattern) else {
+            let Ok(pattern) = RegexShim::new(pattern) else {
                 return Err(Bad::docspan(
                     format!("'{pattern} should be a valid regular expression"),
                     doc,
