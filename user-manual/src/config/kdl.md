@@ -290,29 +290,6 @@ rate-limiting {
 }
 ```
 
-#### `services.$NAME.rate-limiting.timeout`
-
-The `timeout` parameter is used to set the total timeout for acquiring all rate limiting tokens.
-
-If acquiring applicable rate limiting tokens takes longer than this time, the request will not be
-forwarded and will respond with a 429 error.
-
-This parameter is mandatory if the `rate-limiting` section is present.
-
-This is specified in the form:
-
-`timeout millis=TIME`, where `TIME` is an unsigned integer
-
-**Implementation Note**: The rate limiting timeout is a temporary implementation detail to limit
-requests from waiting "too long" to obtain their tokens. In the future, it is planned to modify
-the leaky bucket implementation to instead set an upper limit on the maximum "token debt", or
-how many requests are waiting for a token. Instead of waiting and timing out, requests will instead
-be given immediate feedback that the rate limiting is overcongested, and return a 429 error immediately,
-instead of after a given timeout.
-
-When this change occurs, the `timeout` parameter will be deprecated, and replaced with a `max-token-debt`
-parameter instead.
-
 #### `services.$NAME.rate-limiting.rule`
 
 Rules are used to specify rate limiting parameters, and applicability of rules to a given request.
@@ -320,18 +297,18 @@ Rules are used to specify rate limiting parameters, and applicability of rules t
 ##### Leaky Buckets
 
 Rate limiting in River uses a [Leaky Bucket] model for determining whether a request can be served
-immediately, or if it should be delayed (or rejected). For a given rule, a "bucket" of "tokens"
-is created, where one "token" is required for each request.
+immediately, or if it should be rejected. For a given rule, a "bucket" of "tokens" is created, where
+one "token" is required for each request.
 
 The bucket for a rule starts with a configurable `tokens-per-bucket` number. When a request arrives,
 it attempts to take one token from the bucket. If one is available, it is served immediately. Otherwise,
-the request waits in a first-in, first-out order for a token to become available.
+the request is rejected immediately.
 
 The bucket is refilled at a configurable rate, specified by `refill-rate-ms`, and adds a configurable
 number of tokens specified by `refill-qty`. The number of tokens in the bucket will never exceed the
 initial `tokens-per-bucket` number.
 
-Once a refill occurs, requests may become ready if a token becomes available.
+Once a refill occurs, additional requests may be served.
 
 [Leaky Bucket]: https://en.wikipedia.org/wiki/Leaky_bucket
 
@@ -361,7 +338,7 @@ potentially defeating the objective of accurate rate limiting.
 When multiple rules apply to a single request, for example rules based on both source IP address,
 and the URI path, then a request must claim ALL applicable tokens before proceeding. If a given IP
 address is making it's first request, but to a URI that that has an empty bucket, it will immediately
-obtain the IP address token, but be forced to wait until the URI token has been claimed
+obtain the IP address token, but the request will be rejected as the URI bucket claim failed.
 
 ##### Kinds of Rules
 
