@@ -31,7 +31,10 @@ use crate::{
 };
 
 use self::{
-    rate_limiting::multi::{Rater, RaterInstance, RequestKeyKind},
+    rate_limiting::{
+        multi::{MultiRequestKeyKind, Rater, RaterInstance},
+        AllRequestKeyKind,
+    },
     request_filters::RequestFilterMod,
 };
 
@@ -109,18 +112,26 @@ where
             .expect("static should not error");
         // end of TODO
 
+        // NOTE: Using a silly filter map here because we might have rules in the future
+        // that can't be matched until later stages, such as if we wanted rate limiting
+        // buckets for each upstream that we choose - I want the match statement in this
+        // to no longer compile when we add more RequestKeyKinds.
+        #[allow(clippy::unnecessary_filter_map)]
         let request_filter_stage = conf
             .rate_limiting
             .rules
             .iter()
             .filter_map(|cfg| match &cfg.kind {
-                yes @ RequestKeyKind::SourceIp | yes @ RequestKeyKind::Uri { .. } => {
-                    Some(RaterInstance {
-                        rater: Rater::new(cfg.rater_cfg.clone()),
-                        kind: yes.clone(),
-                    })
-                }
-                RequestKeyKind::DestIp => None,
+                AllRequestKeyKind::SourceIp => Some(RaterInstance {
+                    rater: Rater::new(cfg.rater_cfg.clone()),
+                    kind: MultiRequestKeyKind::SourceIp,
+                }),
+                AllRequestKeyKind::Uri { pattern } => Some(RaterInstance {
+                    rater: Rater::new(cfg.rater_cfg.clone()),
+                    kind: MultiRequestKeyKind::Uri {
+                        pattern: pattern.clone(),
+                    },
+                }),
             })
             .collect();
 

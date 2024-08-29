@@ -15,7 +15,7 @@ use pingora::{
 use tracing::warn;
 
 use crate::proxy::{
-    rate_limiting::multi::RaterInstanceConfig,
+    rate_limiting::RaterInstanceConfig,
     request_selector::{null_selector, RequestSelector},
 };
 

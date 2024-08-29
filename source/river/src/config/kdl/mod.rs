@@ -10,10 +10,7 @@ use crate::{
         PathControl, ProxyConfig, SelectionKind, TlsConfig, UpstreamOptions,
     },
     proxy::{
-        rate_limiting::{
-            multi::{RaterConfig, RaterInstanceConfig, RequestKeyKind},
-            RegexShim,
-        },
+        rate_limiting::{AllRequestKeyKind, RaterConfig, RaterInstanceConfig, RegexShim},
         request_selector::{
             null_selector, source_addr_and_uri_path_selector, uri_path_selector, RequestSelector,
         },
@@ -378,7 +375,7 @@ fn make_rate_limiter(
     match kind {
         "source-ip" => Ok(RaterInstanceConfig {
             rater_cfg,
-            kind: RequestKeyKind::SourceIp,
+            kind: AllRequestKeyKind::SourceIp,
         }),
         "uri" => {
             let pattern = take_str("pattern")?;
@@ -392,7 +389,7 @@ fn make_rate_limiter(
             };
             Ok(RaterInstanceConfig {
                 rater_cfg,
-                kind: RequestKeyKind::Uri { pattern },
+                kind: AllRequestKeyKind::Uri { pattern },
             })
         }
         other => Err(Bad::docspan(

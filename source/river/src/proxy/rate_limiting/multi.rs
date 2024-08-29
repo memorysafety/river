@@ -11,36 +11,24 @@ use leaky_bucket::RateLimiter;
 use pandora_module_utils::pingora::SocketAddr;
 use pingora_proxy::Session;
 
-use super::{Outcome, RegexShim};
+use super::{Outcome, RaterConfig, RegexShim};
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum RequestKeyKind {
+pub enum MultiRequestKeyKind {
     SourceIp,
-    #[allow(dead_code)]
-    DestIp,
-    Uri {
-        pattern: RegexShim,
-    },
+    Uri { pattern: RegexShim },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum RequestKey {
+pub enum MultiRequestKey {
     Source(IpAddr),
-    #[allow(dead_code)]
-    Dest(IpAddr),
     Uri(String),
 }
 
 #[derive(Debug)]
 pub struct RaterInstance {
-    pub rater: Rater<RequestKey>,
-    pub kind: RequestKeyKind,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct RaterInstanceConfig {
-    pub rater_cfg: RaterConfig,
-    pub kind: RequestKeyKind,
+    pub rater: Rater<MultiRequestKey>,
+    pub kind: MultiRequestKeyKind,
 }
 
 impl RaterInstance {
@@ -49,48 +37,26 @@ impl RaterInstance {
         Some(self.rater.get_ticket(key))
     }
 
-    pub fn get_key(&self, session: &mut Session) -> Option<RequestKey> {
+    pub fn get_key(&self, session: &mut Session) -> Option<MultiRequestKey> {
         match &self.kind {
-            RequestKeyKind::SourceIp => {
+            MultiRequestKeyKind::SourceIp => {
                 let src = session.downstream_session.client_addr()?;
                 let src_ip = match src {
                     SocketAddr::Inet(addr) => addr.ip(),
                     SocketAddr::Unix(_) => return None,
                 };
-                Some(RequestKey::Source(src_ip))
+                Some(MultiRequestKey::Source(src_ip))
             }
-            RequestKeyKind::DestIp => None,
-            RequestKeyKind::Uri { pattern } => {
+            MultiRequestKeyKind::Uri { pattern } => {
                 let uri_path = session.downstream_session.req_header().uri.path();
                 if pattern.is_match(uri_path) {
-                    Some(RequestKey::Uri(uri_path.to_string()))
+                    Some(MultiRequestKey::Uri(uri_path.to_string()))
                 } else {
                     None
                 }
             }
         }
     }
-}
-
-/// Configuration for the [`Rater`]
-#[derive(Debug, PartialEq, Clone)]
-pub struct RaterConfig {
-    /// The number of expected concurrent threads - should match the number of
-    /// tokio threadpool workers
-    pub threads: usize,
-    /// The peak number of leaky buckets we aim to have live at once
-    ///
-    /// NOTE: This is not a hard limit of the amount of memory used. See [`ARCacheBuilder`]
-    /// for docs on calculating actual memory usage based on these parameters
-    pub max_buckets: usize,
-    /// The max and initial number of tokens in the leaky bucket - this is the number of
-    /// requests that can go through without any waiting if the bucket is full
-    pub max_tokens_per_bucket: usize,
-    /// The interval between "refills" of the bucket, e.g. the bucket refills `refill_qty`
-    /// every `refill_interval_millis`
-    pub refill_interval_millis: usize,
-    /// The number of tokens added to the bucket every `refill_interval_millis`
-    pub refill_qty: usize,
 }
 
 /// A concurrent rate limiting structure
