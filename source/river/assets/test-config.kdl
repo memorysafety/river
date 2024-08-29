@@ -58,8 +58,11 @@ services {
             // * Up to the last 2000 URI paths will be remembered
             // * Each URI path can make a burst of 20 requests
             // * The bucket for each URI will refill at a rate of 5 requests per 1 millisecond
-            rule kind="uri" pattern="static/.*" \
+            rule kind="specific-uri" pattern="static/.*" \
                 max-buckets=2000 tokens-per-bucket=20 refill-qty=5 refill-rate-ms=1
+
+            rule kind="any-matching-uri" pattern=r".*\.mp4" \
+                tokens-per-bucket=50 refill-qty=2 refill-rate-ms=3
         }
 
         // Connectors are the "upstream" interfaces that we connect with. We can name as many

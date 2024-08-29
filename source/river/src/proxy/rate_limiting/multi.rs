@@ -11,7 +11,36 @@ use leaky_bucket::RateLimiter;
 use pandora_module_utils::pingora::SocketAddr;
 use pingora_proxy::Session;
 
-use super::{Outcome, RaterConfig, RegexShim};
+use crate::proxy::rate_limiting::Ticket;
+
+use super::RegexShim;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MultiRaterInstanceConfig {
+    pub rater_cfg: MultiRaterConfig,
+    pub kind: MultiRequestKeyKind,
+}
+
+/// Configuration for the [`Rater`]
+#[derive(Debug, PartialEq, Clone)]
+pub struct MultiRaterConfig {
+    /// The number of expected concurrent threads - should match the number of
+    /// tokio threadpool workers
+    pub threads: usize,
+    /// The peak number of leaky buckets we aim to have live at once
+    ///
+    /// NOTE: This is not a hard limit of the amount of memory used. See [`ARCacheBuilder`]
+    /// for docs on calculating actual memory usage based on these parameters
+    pub max_buckets: usize,
+    /// The max and initial number of tokens in the leaky bucket - this is the number of
+    /// requests that can go through without any waiting if the bucket is full
+    pub max_tokens_per_bucket: usize,
+    /// The interval between "refills" of the bucket, e.g. the bucket refills `refill_qty`
+    /// every `refill_interval_millis`
+    pub refill_interval_millis: usize,
+    /// The number of tokens added to the bucket every `refill_interval_millis`
+    pub refill_qty: usize,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum MultiRequestKeyKind {
@@ -26,18 +55,25 @@ pub enum MultiRequestKey {
 }
 
 #[derive(Debug)]
-pub struct RaterInstance {
+pub struct MultiRaterInstance {
     pub rater: Rater<MultiRequestKey>,
     pub kind: MultiRequestKeyKind,
 }
 
-impl RaterInstance {
-    pub fn get_ticket(&self, session: &mut Session) -> Option<Ticket> {
+impl MultiRaterInstance {
+    pub fn new(config: MultiRaterConfig, kind: MultiRequestKeyKind) -> Self {
+        Self {
+            rater: Rater::new(config),
+            kind,
+        }
+    }
+
+    pub fn get_ticket(&self, session: &Session) -> Option<Ticket> {
         let key = self.get_key(session)?;
         Some(self.rater.get_ticket(key))
     }
 
-    pub fn get_key(&self, session: &mut Session) -> Option<MultiRequestKey> {
+    pub fn get_key(&self, session: &Session) -> Option<MultiRequestKey> {
         match &self.kind {
             MultiRequestKeyKind::SourceIp => {
                 let src = session.downstream_session.client_addr()?;
@@ -131,8 +167,8 @@ where
     /// Create a new rate limiter with the given configuration.
     ///
     /// See [`RaterConfig`] for configuration options.
-    pub fn new(config: RaterConfig) -> Self {
-        let RaterConfig {
+    pub fn new(config: MultiRaterConfig) -> Self {
+        let MultiRaterConfig {
             threads,
             max_buckets,
             max_tokens_per_bucket,
@@ -207,34 +243,10 @@ where
     }
 }
 
-#[allow(dead_code)]
-#[derive(Debug, PartialEq, Clone)]
-pub enum TicketError {
-    BurstLimitExceeded,
-}
-
-/// A claim ticket for the leaky bucket queue
-///
-/// You are expected to call [`Ticket::wait()`] to wait for your turn to perform
-/// the rate limited option.
-#[must_use = "You must call `Ticket::wait()` to wait your turn!"]
-pub struct Ticket {
-    limiter: Arc<RateLimiter>,
-}
-
-impl Ticket {
-    /// Try to get a token immediately from the bucket.
-    pub fn now_or_never(self) -> Outcome {
-        if self.limiter.try_acquire(1) {
-            Outcome::Approved
-        } else {
-            Outcome::Declined
-        }
-    }
-}
-
 #[cfg(test)]
 mod test {
+    use crate::proxy::rate_limiting::Outcome;
+
     use super::*;
     use std::time::Instant;
     use tokio::time::interval;
@@ -242,7 +254,7 @@ mod test {
     #[tokio::test]
     async fn smoke() {
         let _ = tracing_subscriber::fmt::try_init();
-        let config = RaterConfig {
+        let config = MultiRaterConfig {
             threads: 2,
             max_buckets: 5,
             max_tokens_per_bucket: 3,

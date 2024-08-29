@@ -1,14 +1,13 @@
 use std::{collections::BTreeMap, net::SocketAddr};
 
 use pingora::upstreams::peer::HttpPeer;
-use regex::Regex;
 
 use crate::{
     config::internal::{
         FileServerConfig, ListenerConfig, ListenerKind, ProxyConfig, UpstreamOptions,
     },
     proxy::{
-        rate_limiting::{RaterConfig, RaterInstanceConfig, RegexShim},
+        rate_limiting::{multi::MultiRaterConfig, AllRateConfig, RegexShim},
         request_selector::uri_path_selector,
     },
 };
@@ -93,26 +92,36 @@ fn load_test() {
                 },
                 rate_limiting: crate::config::internal::RateLimitingConfig {
                     rules: vec![
-                        RaterInstanceConfig {
-                            rater_cfg: RaterConfig {
+                        AllRateConfig::Multi {
+                            config: MultiRaterConfig {
                                 threads: 8,
                                 max_buckets: 4000,
                                 max_tokens_per_bucket: 10,
                                 refill_interval_millis: 10,
                                 refill_qty: 1,
                             },
-                            kind: crate::proxy::rate_limiting::RequestKeyKind::SourceIp,
+                            kind: crate::proxy::rate_limiting::multi::MultiRequestKeyKind::SourceIp,
                         },
-                        RaterInstanceConfig {
-                            rater_cfg: RaterConfig {
+                        AllRateConfig::Multi {
+                            config: MultiRaterConfig {
                                 threads: 8,
                                 max_buckets: 2000,
                                 max_tokens_per_bucket: 20,
                                 refill_interval_millis: 1,
                                 refill_qty: 5,
                             },
-                            kind: crate::proxy::rate_limiting::RequestKeyKind::Uri {
+                            kind: crate::proxy::rate_limiting::multi::MultiRequestKeyKind::Uri {
                                 pattern: RegexShim::new("static/.*").unwrap(),
+                            },
+                        },
+                        AllRateConfig::Single {
+                            config: crate::proxy::rate_limiting::single::SingleInstanceConfig {
+                                max_tokens_per_bucket: 50,
+                                refill_interval_millis: 3,
+                                refill_qty: 2,
+                            },
+                            kind: crate::proxy::rate_limiting::single::SingleRequestKeyKind::UriGroup {
+                                pattern: RegexShim::new(r".*\.mp4").unwrap(),
                             },
                         },
                     ],

@@ -15,7 +15,7 @@ use pingora::{
 use tracing::warn;
 
 use crate::proxy::{
-    rate_limiting::RaterInstanceConfig,
+    rate_limiting::AllRateConfig,
     request_selector::{null_selector, RequestSelector},
 };
 
@@ -115,7 +115,7 @@ impl Config {
 ///
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct RateLimitingConfig {
-    pub(crate) rules: Vec<RaterInstanceConfig>,
+    pub(crate) rules: Vec<AllRateConfig>,
 }
 
 /// Add Path Control Modifiers

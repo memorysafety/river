@@ -31,10 +31,7 @@ use crate::{
 };
 
 use self::{
-    rate_limiting::{
-        multi::{MultiRequestKeyKind, Rater, RaterInstance},
-        AllRequestKeyKind,
-    },
+    rate_limiting::{multi::MultiRaterInstance, single::SingleInstance, Outcome},
     request_filters::RequestFilterMod,
 };
 
@@ -45,7 +42,8 @@ pub mod request_selector;
 pub mod response_modifiers;
 
 pub struct RateLimiters {
-    request_filter_stage: Vec<RaterInstance>,
+    request_filter_stage_multi: Vec<MultiRaterInstance>,
+    request_filter_stage_single: Vec<SingleInstance>,
 }
 
 /// The [RiverProxyService] is intended to capture the behaviors used to extend
@@ -112,28 +110,21 @@ where
             .expect("static should not error");
         // end of TODO
 
-        // NOTE: Using a silly filter map here because we might have rules in the future
-        // that can't be matched until later stages, such as if we wanted rate limiting
-        // buckets for each upstream that we choose - I want the match statement in this
-        // to no longer compile when we add more RequestKeyKinds.
-        #[allow(clippy::unnecessary_filter_map)]
-        let request_filter_stage = conf
-            .rate_limiting
-            .rules
-            .iter()
-            .filter_map(|cfg| match &cfg.kind {
-                AllRequestKeyKind::SourceIp => Some(RaterInstance {
-                    rater: Rater::new(cfg.rater_cfg.clone()),
-                    kind: MultiRequestKeyKind::SourceIp,
-                }),
-                AllRequestKeyKind::Uri { pattern } => Some(RaterInstance {
-                    rater: Rater::new(cfg.rater_cfg.clone()),
-                    kind: MultiRequestKeyKind::Uri {
-                        pattern: pattern.clone(),
-                    },
-                }),
-            })
-            .collect();
+        let mut request_filter_stage_multi = vec![];
+        let mut request_filter_stage_single = vec![];
+
+        for rule in conf.rate_limiting.rules {
+            match rule {
+                rate_limiting::AllRateConfig::Single { kind, config } => {
+                    let rater = SingleInstance::new(config, kind);
+                    request_filter_stage_single.push(rater);
+                }
+                rate_limiting::AllRateConfig::Multi { kind, config } => {
+                    let rater = MultiRaterInstance::new(config, kind);
+                    request_filter_stage_multi.push(rater);
+                }
+            }
+        }
 
         let mut my_proxy = pingora_proxy::http_proxy_service_with_name(
             &server.configuration,
@@ -142,7 +133,8 @@ where
                 load_balancer: upstreams,
                 request_selector: conf.upstream_options.selector,
                 rate_limiters: RateLimiters {
-                    request_filter_stage,
+                    request_filter_stage_multi,
+                    request_filter_stage_single,
                 },
             },
             &conf.name,
@@ -280,9 +272,40 @@ where
     where
         Self::CTX: Send + Sync,
     {
-        // First: do rate limiting at this stage - quickly check if there are none and skip over
-        // entirely if so
-        if !self.rate_limiters.request_filter_stage.is_empty() {
+        let multis = self
+            .rate_limiters
+            .request_filter_stage_multi
+            .iter()
+            .filter_map(|l| l.get_ticket(session));
+
+        let singles = self
+            .rate_limiters
+            .request_filter_stage_single
+            .iter()
+            .filter_map(|l| l.get_ticket(session));
+
+        // Attempt to get all tokens
+        //
+        // TODO: If https://github.com/udoprog/leaky-bucket/issues/17 is resolved we could
+        // remember the buckets that we did get approved for, and "return" the unused tokens.
+        //
+        // For now, if some tickets succeed but subsequent tickets fail, the preceeding
+        // approved tokens are just "burned".
+        //
+        // TODO: If https://github.com/udoprog/leaky-bucket/issues/34 is resolved we could
+        // support a "max debt" number, allowing us to delay if acquisition of the token
+        // would happen soon-ish, instead of immediately 429-ing if the token we need is
+        // about to become available.
+        if singles
+            .chain(multis)
+            .any(|t| t.now_or_never() == Outcome::Declined)
+        {
+            tracing::trace!("Rejecting due to rate limiting failure");
+            session.downstream_session.respond_error(429).await;
+            return Ok(true);
+        }
+
+        if !self.rate_limiters.request_filter_stage_single.is_empty() {
             // Attempt to get all tokens
             //
             // TODO: If https://github.com/udoprog/leaky-bucket/issues/17 is resolved we could
@@ -295,13 +318,13 @@ where
             // support a "max debt" number, allowing us to delay if acquisition of the token
             // would happen soon-ish, instead of immediately 429-ing if the token we need is
             // about to become available.
-            for limiter in self.rate_limiters.request_filter_stage.iter() {
+            for limiter in self.rate_limiters.request_filter_stage_single.iter() {
                 if let Some(ticket) = limiter.get_ticket(session) {
                     match ticket.now_or_never() {
-                        rate_limiting::Outcome::Approved => {
+                        Outcome::Approved => {
                             // Approved, move on
                         }
-                        rate_limiting::Outcome::Declined => {
+                        Outcome::Declined => {
                             tracing::trace!("Rejecting due to rate limiting failure");
                             session.downstream_session.respond_error(429).await;
                             return Ok(true);

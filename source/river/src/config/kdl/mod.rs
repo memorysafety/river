@@ -10,7 +10,11 @@ use crate::{
         PathControl, ProxyConfig, SelectionKind, TlsConfig, UpstreamOptions,
     },
     proxy::{
-        rate_limiting::{AllRequestKeyKind, RaterConfig, RaterInstanceConfig, RegexShim},
+        rate_limiting::{
+            multi::{MultiRaterConfig, MultiRequestKeyKind},
+            single::{SingleInstanceConfig, SingleRequestKeyKind},
+            AllRateConfig, RegexShim,
+        },
         request_selector::{
             null_selector, source_addr_and_uri_path_selector, uri_path_selector, RequestSelector,
         },
@@ -324,7 +328,7 @@ fn make_rate_limiter(
     doc: &KdlDocument,
     node: &KdlNode,
     args: BTreeMap<&str, &KdlValue>,
-) -> miette::Result<RaterInstanceConfig> {
+) -> miette::Result<AllRateConfig> {
     let take_num = |key: &str| -> miette::Result<usize> {
         let Some(val) = args.get(key) else {
             return Err(Bad::docspan(format!("Missing key: '{key}'"), doc, node.span()).into());
@@ -359,39 +363,57 @@ fn make_rate_limiter(
 
     // mandatory/common fields
     let kind = take_str("kind")?;
-    let max_buckets = take_num("max-buckets")?;
     let tokens_per_bucket = take_num("tokens-per-bucket")?;
     let refill_qty = take_num("refill-qty")?;
     let refill_rate_ms = take_num("refill-rate-ms")?;
 
-    let rater_cfg = RaterConfig {
-        threads: threads_per_service,
-        max_buckets,
+    let multi_cfg = || -> miette::Result<MultiRaterConfig> {
+        let max_buckets = take_num("max-buckets")?;
+        Ok(MultiRaterConfig {
+            threads: threads_per_service,
+            max_buckets,
+            max_tokens_per_bucket: tokens_per_bucket,
+            refill_interval_millis: refill_rate_ms,
+            refill_qty,
+        })
+    };
+
+    let single_cfg = || SingleInstanceConfig {
         max_tokens_per_bucket: tokens_per_bucket,
         refill_interval_millis: refill_rate_ms,
         refill_qty,
     };
 
+    let regex_pattern = || -> miette::Result<RegexShim> {
+        let pattern = take_str("pattern")?;
+        let Ok(pattern) = RegexShim::new(pattern) else {
+            return Err(Bad::docspan(
+                format!("'{pattern} should be a valid regular expression"),
+                doc,
+                node.span(),
+            )
+            .into());
+        };
+        Ok(pattern)
+    };
+
     match kind {
-        "source-ip" => Ok(RaterInstanceConfig {
-            rater_cfg,
-            kind: AllRequestKeyKind::SourceIp,
+        "source-ip" => Ok(AllRateConfig::Multi {
+            kind: MultiRequestKeyKind::SourceIp,
+            config: multi_cfg()?,
         }),
-        "uri" => {
-            let pattern = take_str("pattern")?;
-            let Ok(pattern) = RegexShim::new(pattern) else {
-                return Err(Bad::docspan(
-                    format!("'{pattern} should be a valid regular expression"),
-                    doc,
-                    node.span(),
-                )
-                .into());
-            };
-            Ok(RaterInstanceConfig {
-                rater_cfg,
-                kind: AllRequestKeyKind::Uri { pattern },
-            })
-        }
+        "specific-uri" => Ok(AllRateConfig::Multi {
+            kind: MultiRequestKeyKind::Uri {
+                pattern: regex_pattern()?,
+            },
+            config: multi_cfg()?,
+        }),
+        "any-matching-uri" => Ok(AllRateConfig::Single {
+            kind: SingleRequestKeyKind::UriGroup {
+                pattern: regex_pattern()?,
+            },
+            config: single_cfg(),
+        }),
         other => Err(Bad::docspan(
             format!("'{other} is not a known kind of rate limiting"),
             doc,
