@@ -10,7 +10,10 @@ use crate::{
         PathControl, ProxyConfig, SelectionKind, TlsConfig, UpstreamOptions,
     },
     proxy::{
-        rate_limiting::{RaterConfig, RaterInstanceConfig, RegexShim, RequestKeyKind},
+        rate_limiting::{
+            multi::{RaterConfig, RaterInstanceConfig, RequestKeyKind},
+            RegexShim,
+        },
         request_selector::{
             null_selector, source_addr_and_uri_path_selector, uri_path_selector, RequestSelector,
         },

@@ -4,13 +4,14 @@
 //!
 //! See the [`Rater`] structure for more details
 
-use std::{fmt::Debug, hash::Hash, net::IpAddr, ops::Deref, sync::Arc, time::Duration};
+use std::{fmt::Debug, hash::Hash, net::IpAddr, sync::Arc, time::Duration};
 
 use concread::arcache::{ARCache, ARCacheBuilder};
 use leaky_bucket::RateLimiter;
 use pandora_module_utils::pingora::SocketAddr;
 use pingora_proxy::Session;
-use regex::Regex;
+
+use super::{Outcome, RegexShim};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum RequestKeyKind {
@@ -20,29 +21,6 @@ pub enum RequestKeyKind {
     Uri {
         pattern: RegexShim,
     },
-}
-
-#[derive(Debug, Clone)]
-pub struct RegexShim(pub Regex);
-
-impl PartialEq for RegexShim {
-    fn eq(&self, other: &Self) -> bool {
-        self.0.as_str().eq(other.0.as_str())
-    }
-}
-
-impl Deref for RegexShim {
-    type Target = Regex;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl RegexShim {
-    pub fn new(pattern: &str) -> Result<Self, regex::Error> {
-        Ok(Self(Regex::new(pattern)?))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -63,12 +41,6 @@ pub struct RaterInstance {
 pub struct RaterInstanceConfig {
     pub rater_cfg: RaterConfig,
     pub kind: RequestKeyKind,
-}
-
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub enum Outcome {
-    Approved,
-    Declined,
 }
 
 impl RaterInstance {

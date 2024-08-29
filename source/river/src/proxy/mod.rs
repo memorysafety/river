@@ -31,7 +31,7 @@ use crate::{
 };
 
 use self::{
-    rate_limiting::{Rater, RaterInstance, RequestKeyKind},
+    rate_limiting::multi::{Rater, RaterInstance, RequestKeyKind},
     request_filters::RequestFilterMod,
 };
 
