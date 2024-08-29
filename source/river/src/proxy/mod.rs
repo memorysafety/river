@@ -305,35 +305,6 @@ where
             return Ok(true);
         }
 
-        if !self.rate_limiters.request_filter_stage_single.is_empty() {
-            // Attempt to get all tokens
-            //
-            // TODO: If https://github.com/udoprog/leaky-bucket/issues/17 is resolved we could
-            // remember the buckets that we did get approved for, and "return" the unused tokens.
-            //
-            // For now, if some tickets succeed but subsequent tickets fail, the preceeding
-            // approved tokens are just "burned".
-            //
-            // TODO: If https://github.com/udoprog/leaky-bucket/issues/34 is resolved we could
-            // support a "max debt" number, allowing us to delay if acquisition of the token
-            // would happen soon-ish, instead of immediately 429-ing if the token we need is
-            // about to become available.
-            for limiter in self.rate_limiters.request_filter_stage_single.iter() {
-                if let Some(ticket) = limiter.get_ticket(session) {
-                    match ticket.now_or_never() {
-                        Outcome::Approved => {
-                            // Approved, move on
-                        }
-                        Outcome::Declined => {
-                            tracing::trace!("Rejecting due to rate limiting failure");
-                            session.downstream_session.respond_error(429).await;
-                            return Ok(true);
-                        }
-                    }
-                }
-            }
-        }
-
         for filter in &self.modifiers.request_filters {
             match filter.request_filter(session, ctx).await {
                 // If Ok true: we're done handling this request
