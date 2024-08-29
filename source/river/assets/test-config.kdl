@@ -61,6 +61,11 @@ services {
             rule kind="specific-uri" pattern="static/.*" \
                 max-buckets=2000 tokens-per-bucket=20 refill-qty=5 refill-rate-ms=1
 
+            // This rate limiting is based on ANY URI paths that match the pattern
+            //
+            // * A single bucket will be used for all URIs that match the pattern
+            // * We allow a burst of up to 50 requests for any MP4 files
+            // * The bucket for all MP4 files will refill at a rate of 2 requests per 3 milliseconds
             rule kind="any-matching-uri" pattern=r".*\.mp4" \
                 tokens-per-bucket=50 refill-qty=2 refill-rate-ms=3
         }

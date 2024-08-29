@@ -280,13 +280,14 @@ Example:
 
 ```
 rate-limiting {
-    timeout millis=100
-
     rule kind="source-ip" \
         max-buckets=4000 tokens-per-bucket=10 refill-qty=1 refill-rate-ms=10
 
-    rule kind="uri" pattern="static/.*" \
+    rule kind="specific-uri" pattern="static/.*" \
         max-buckets=2000 tokens-per-bucket=20 refill-qty=5 refill-rate-ms=1
+
+    rule kind="any-matching-uri" pattern=r".*\.mp4" \
+        tokens-per-bucket=50 refill-qty=2 refill-rate-ms=3
 }
 ```
 
@@ -315,7 +316,7 @@ Once a refill occurs, additional requests may be served.
 ##### How many buckets?
 
 Some rules require many buckets. For example, rules based on the source IP address will create a bucket
-for each unique source IP address observed in a request.
+for each unique source IP address observed in a request. We refer to these as "multi" rules.
 
 However, each of these buckets require space to contain the metadata, and to avoid unbounded growth,
 we allow for a configurable `max-buckets` number, which serves to influence the total memory required
@@ -333,6 +334,9 @@ If `max-buckets` is set too low, then buckets will be "evicted" from the cache, 
 requests matching that bucket will require the creation of a new bucket (with a full set of tokens),
 potentially defeating the objective of accurate rate limiting.
 
+For "single" rules, or rules that do not have multiple buckets, a single bucket will be shared by all
+requests matching the rule.
+
 ##### Gotta claim 'em all
 
 When multiple rules apply to a single request, for example rules based on both source IP address,
@@ -342,19 +346,29 @@ obtain the IP address token, but the request will be rejected as the URI bucket 
 
 ##### Kinds of Rules
 
-Currently two kinds of rules are supported:
+Currently three kinds of rules are supported:
 
-* `kind="source-ip"` - this tracks the IP address of the requestor. A unique bucket will be created for
-  the IPv4 or IPv6 address of the requestor.
-* `kind="uri" pattern="REGEX"` - This tracks the URI path of the request, such as `static/images/example.jpg`
-    * If the request's URI path matches the provided `REGEX`, the full URI path will be assigned to a given
-      bucket
+* `kind="source-ip"` - this tracks the IP address of the requestor.
+    * This rule is a "multi" rule: A unique bucket will be created for
+      the IPv4 or IPv6 address of the requestor.
+    * The `max-buckets` parameter controls how many IP addresses will be remembered.
+* `kind="specific-uri" pattern="REGEX"` - This tracks the URI path of the request, such as `static/images/example.jpg`
+    * This rule is a "multi" rule: if the request's URI path matches the provided `REGEX`,
+      the full URI path will be assigned to a given bucket
     * For example, if the regex `static/.*` was provided:
         * `index.html` would not match this rule, and would not require obtaining a token
         * `static/images/example.jpg` would match this rule, and would require obtaining a token
         * `static/styles/example.css` would also match this rule, and would require obtaining a token
         * Note that `static/images/example.jpg` and `static/styles/example.css` would each have a UNIQUE
           bucket.
+* `kind="any-matching-uri" pattern="REGEX"` - This tracks the URI path of the request, such as `static/videos/example.mp4`
+    * This is a "single" rule: ANY path matching `REGEX` will share a single bucket
+    * For example, if the regex `.*\.mp4` was provided:
+        * `index.html` would not match this rule, and would not require obtaining a token
+        * `static/videos/example1.mp4` would match this rule, and would require obtaining a token
+        * `static/videos/example2.mp4` would also match this rule, and would require obtaining a token
+        * Note that `static/videos/example1.mp4` and `static/videos/example2.mp4` would share a SINGLE bucket
+          (also shared with any other path containing an MP4 file)
 
 ### `services.$NAME.file-server`
 
