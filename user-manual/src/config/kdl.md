@@ -98,13 +98,14 @@ services {
             }
         }
         rate-limiting {
-            timeout millis=100
-
             rule kind="source-ip" \
                 max-buckets=4000 tokens-per-bucket=10 refill-qty=1 refill-rate-ms=10
 
-            rule kind="uri" pattern="static/.*" \
+            rule kind="specific-uri" pattern="static/.*" \
                 max-buckets=2000 tokens-per-bucket=20 refill-qty=5 refill-rate-ms=1
+
+            rule kind="any-matching-uri" pattern=r".*\.mp4" \
+                tokens-per-bucket=50 refill-qty=2 refill-rate-ms=3
         }
     }
     Example3 {

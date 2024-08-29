@@ -31,7 +31,7 @@ pub struct SingleInstance {
 impl SingleInstance {
     /// Create a new rate limiter with the given configuration.
     ///
-    /// See [`RaterConfig`] for configuration options.
+    /// See [`SingleInstanceConfig`] for configuration options.
     pub fn new(config: SingleInstanceConfig, kind: SingleRequestKeyKind) -> Self {
         let SingleInstanceConfig {
             max_tokens_per_bucket,

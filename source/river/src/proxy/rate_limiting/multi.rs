@@ -166,7 +166,7 @@ where
 {
     /// Create a new rate limiter with the given configuration.
     ///
-    /// See [`RaterConfig`] for configuration options.
+    /// See [`MultiRaterConfig`] for configuration options.
     pub fn new(config: MultiRaterConfig) -> Self {
         let MultiRaterConfig {
             threads,
