@@ -134,9 +134,7 @@ fn load_test() {
                     request_filters: vec![],
                 },
                 upstream_options: UpstreamOptions::default(),
-                rate_limiting: crate::config::internal::RateLimitingConfig {
-                    rules: vec![],
-                },
+                rate_limiting: crate::config::internal::RateLimitingConfig { rules: vec![] },
             },
         ],
         file_servers: vec![FileServerConfig {
