@@ -97,6 +97,16 @@ services {
                 filter kind="upsert-header" key="x-with-love-from" value="river"
             }
         }
+        rate-limiting {
+            rule kind="source-ip" \
+                max-buckets=4000 tokens-per-bucket=10 refill-qty=1 refill-rate-ms=10
+
+            rule kind="specific-uri" pattern="static/.*" \
+                max-buckets=2000 tokens-per-bucket=20 refill-qty=5 refill-rate-ms=1
+
+            rule kind="any-matching-uri" pattern=r".*\.mp4" \
+                tokens-per-bucket=50 refill-qty=2 refill-rate-ms=3
+        }
     }
     Example3 {
         listeners {
@@ -254,6 +264,112 @@ Filters at this stage are the earliest. Currently supported filters:
 * `kind = "upsert-header"`
     * Arguments: `key="KEY" value="VALUE"`, where `KEY` is a valid HTTP header key, and `VALUE` is a valid HTTP header value
     * The given header will be added or replaced to `VALUE`
+
+### `services.$NAME.rate-limiting`
+
+This section contains the configuration for rate limiting rules.
+
+Rate limiting rules are used to limit the total number of requests made by downstream clients,
+based on various criteria.
+
+Note that Rate limiting is on a **per service** basis, services do not share rate limiting
+information.
+
+This section is optional.
+
+Example:
+
+```
+rate-limiting {
+    rule kind="source-ip" \
+        max-buckets=4000 tokens-per-bucket=10 refill-qty=1 refill-rate-ms=10
+
+    rule kind="specific-uri" pattern="static/.*" \
+        max-buckets=2000 tokens-per-bucket=20 refill-qty=5 refill-rate-ms=1
+
+    rule kind="any-matching-uri" pattern=r".*\.mp4" \
+        tokens-per-bucket=50 refill-qty=2 refill-rate-ms=3
+}
+```
+
+#### `services.$NAME.rate-limiting.rule`
+
+Rules are used to specify rate limiting parameters, and applicability of rules to a given request.
+
+##### Leaky Buckets
+
+Rate limiting in River uses a [Leaky Bucket] model for determining whether a request can be served
+immediately, or if it should be rejected. For a given rule, a "bucket" of "tokens" is created, where
+one "token" is required for each request.
+
+The bucket for a rule starts with a configurable `tokens-per-bucket` number. When a request arrives,
+it attempts to take one token from the bucket. If one is available, it is served immediately. Otherwise,
+the request is rejected immediately.
+
+The bucket is refilled at a configurable rate, specified by `refill-rate-ms`, and adds a configurable
+number of tokens specified by `refill-qty`. The number of tokens in the bucket will never exceed the
+initial `tokens-per-bucket` number.
+
+Once a refill occurs, additional requests may be served.
+
+[Leaky Bucket]: https://en.wikipedia.org/wiki/Leaky_bucket
+
+##### How many buckets?
+
+Some rules require many buckets. For example, rules based on the source IP address will create a bucket
+for each unique source IP address observed in a request. We refer to these as "multi" rules.
+
+However, each of these buckets require space to contain the metadata, and to avoid unbounded growth,
+we allow for a configurable `max-buckets` number, which serves to influence the total memory required
+for storing buckets. This uses an [Adaptive Replacement Cache]
+to allow for concurrent access to these buckets, as well as the ability to automatically evict buckets that
+are not actively being used (somewhat similar to an LRU or "Least Recently Used" cache).
+
+[Adaptive Replacement Cache]: https://docs.rs/concread/latest/concread/arcache/index.html
+
+There is a trade off here: The larger `max-buckets` is, the longer that River can "remember" a bucket
+for a given factor, such as specific IP addresses. However, it also requires more resident memory to
+retain this information.
+
+If `max-buckets` is set too low, then buckets will be "evicted" from the cache, meaning that subsequent
+requests matching that bucket will require the creation of a new bucket (with a full set of tokens),
+potentially defeating the objective of accurate rate limiting.
+
+For "single" rules, or rules that do not have multiple buckets, a single bucket will be shared by all
+requests matching the rule.
+
+##### Gotta claim 'em all
+
+When multiple rules apply to a single request, for example rules based on both source IP address,
+and the URI path, then a request must claim ALL applicable tokens before proceeding. If a given IP
+address is making it's first request, but to a URI that that has an empty bucket, it will immediately
+obtain the IP address token, but the request will be rejected as the URI bucket claim failed.
+
+##### Kinds of Rules
+
+Currently three kinds of rules are supported:
+
+* `kind="source-ip"` - this tracks the IP address of the requestor.
+    * This rule is a "multi" rule: A unique bucket will be created for
+      the IPv4 or IPv6 address of the requestor.
+    * The `max-buckets` parameter controls how many IP addresses will be remembered.
+* `kind="specific-uri" pattern="REGEX"` - This tracks the URI path of the request, such as `static/images/example.jpg`
+    * This rule is a "multi" rule: if the request's URI path matches the provided `REGEX`,
+      the full URI path will be assigned to a given bucket
+    * For example, if the regex `static/.*` was provided:
+        * `index.html` would not match this rule, and would not require obtaining a token
+        * `static/images/example.jpg` would match this rule, and would require obtaining a token
+        * `static/styles/example.css` would also match this rule, and would require obtaining a token
+        * Note that `static/images/example.jpg` and `static/styles/example.css` would each have a UNIQUE
+          bucket.
+* `kind="any-matching-uri" pattern="REGEX"` - This tracks the URI path of the request, such as `static/videos/example.mp4`
+    * This is a "single" rule: ANY path matching `REGEX` will share a single bucket
+    * For example, if the regex `.*\.mp4` was provided:
+        * `index.html` would not match this rule, and would not require obtaining a token
+        * `static/videos/example1.mp4` would match this rule, and would require obtaining a token
+        * `static/videos/example2.mp4` would also match this rule, and would require obtaining a token
+        * Note that `static/videos/example1.mp4` and `static/videos/example2.mp4` would share a SINGLE bucket
+          (also shared with any other path containing an MP4 file)
 
 ### `services.$NAME.file-server`
 

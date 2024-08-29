@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use async_trait::async_trait;
 use futures_util::FutureExt;
 
-use pingora::{server::Server, Error};
+use pingora::{server::Server, Error, ErrorType};
 use pingora_core::{upstreams::peer::HttpPeer, Result};
 use pingora_http::{RequestHeader, ResponseHeader};
 use pingora_load_balancing::{
@@ -30,12 +30,21 @@ use crate::{
     },
 };
 
-use self::request_filters::RequestFilterMod;
+use self::{
+    rate_limiting::{multi::MultiRaterInstance, single::SingleInstance, Outcome},
+    request_filters::RequestFilterMod,
+};
 
+pub mod rate_limiting;
 pub mod request_filters;
 pub mod request_modifiers;
 pub mod request_selector;
 pub mod response_modifiers;
+
+pub struct RateLimiters {
+    request_filter_stage_multi: Vec<MultiRaterInstance>,
+    request_filter_stage_single: Vec<SingleInstance>,
+}
 
 /// The [RiverProxyService] is intended to capture the behaviors used to extend
 /// the [HttpProxy] functionality by providing a [ProxyHttp] trait implementation.
@@ -50,6 +59,7 @@ pub struct RiverProxyService<BS: BackendSelection> {
     /// Load Balancer
     pub load_balancer: LoadBalancer<BS>,
     pub request_selector: RequestSelector,
+    pub rate_limiters: RateLimiters,
 }
 
 /// Create a proxy service, with the type parameters chosen based on the config file
@@ -100,12 +110,32 @@ where
             .expect("static should not error");
         // end of TODO
 
+        let mut request_filter_stage_multi = vec![];
+        let mut request_filter_stage_single = vec![];
+
+        for rule in conf.rate_limiting.rules {
+            match rule {
+                rate_limiting::AllRateConfig::Single { kind, config } => {
+                    let rater = SingleInstance::new(config, kind);
+                    request_filter_stage_single.push(rater);
+                }
+                rate_limiting::AllRateConfig::Multi { kind, config } => {
+                    let rater = MultiRaterInstance::new(config, kind);
+                    request_filter_stage_multi.push(rater);
+                }
+            }
+        }
+
         let mut my_proxy = pingora_proxy::http_proxy_service_with_name(
             &server.configuration,
             Self {
                 modifiers,
                 load_balancer: upstreams,
                 request_selector: conf.upstream_options.selector,
+                rate_limiters: RateLimiters {
+                    request_filter_stage_multi,
+                    request_filter_stage_single,
+                },
             },
             &conf.name,
         );
@@ -168,7 +198,7 @@ impl Modifiers {
                 }
                 other => {
                     tracing::warn!("Unknown request filter: '{other}'");
-                    return Err(Error::new(pingora::ErrorType::Custom("Bad configuration")));
+                    return Err(Error::new(ErrorType::Custom("Bad configuration")));
                 }
             };
             request_filter_mods.push(f);
@@ -186,7 +216,7 @@ impl Modifiers {
                 }
                 other => {
                     tracing::warn!("Unknown upstream request filter: '{other}'");
-                    return Err(Error::new(pingora::ErrorType::Custom("Bad configuration")));
+                    return Err(Error::new(ErrorType::Custom("Bad configuration")));
                 }
             };
             upstream_request_filters.push(f);
@@ -204,7 +234,7 @@ impl Modifiers {
                 }
                 other => {
                     tracing::warn!("Unknown upstream response filter: '{other}'");
-                    return Err(Error::new(pingora::ErrorType::Custom("Bad configuration")));
+                    return Err(Error::new(ErrorType::Custom("Bad configuration")));
                 }
             };
             upstream_response_filters.push(f);
@@ -242,6 +272,39 @@ where
     where
         Self::CTX: Send + Sync,
     {
+        let multis = self
+            .rate_limiters
+            .request_filter_stage_multi
+            .iter()
+            .filter_map(|l| l.get_ticket(session));
+
+        let singles = self
+            .rate_limiters
+            .request_filter_stage_single
+            .iter()
+            .filter_map(|l| l.get_ticket(session));
+
+        // Attempt to get all tokens
+        //
+        // TODO: If https://github.com/udoprog/leaky-bucket/issues/17 is resolved we could
+        // remember the buckets that we did get approved for, and "return" the unused tokens.
+        //
+        // For now, if some tickets succeed but subsequent tickets fail, the preceeding
+        // approved tokens are just "burned".
+        //
+        // TODO: If https://github.com/udoprog/leaky-bucket/issues/34 is resolved we could
+        // support a "max debt" number, allowing us to delay if acquisition of the token
+        // would happen soon-ish, instead of immediately 429-ing if the token we need is
+        // about to become available.
+        if singles
+            .chain(multis)
+            .any(|t| t.now_or_never() == Outcome::Declined)
+        {
+            tracing::trace!("Rejecting due to rate limiting failure");
+            session.downstream_session.respond_error(429).await;
+            return Ok(true);
+        }
+
         for filter in &self.modifiers.request_filters {
             match filter.request_filter(session, ctx).await {
                 // If Ok true: we're done handling this request

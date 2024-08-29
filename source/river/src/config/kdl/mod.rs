@@ -4,19 +4,27 @@ use std::{
     path::PathBuf,
 };
 
-use kdl::{KdlDocument, KdlEntry, KdlNode};
-use miette::{bail, Diagnostic, SourceSpan};
-use pingora::{protocols::ALPN, upstreams::peer::HttpPeer};
-
 use crate::{
     config::internal::{
         Config, DiscoveryKind, FileServerConfig, HealthCheckKind, ListenerConfig, ListenerKind,
         PathControl, ProxyConfig, SelectionKind, TlsConfig, UpstreamOptions,
     },
-    proxy::request_selector::{
-        null_selector, source_addr_and_uri_path_selector, uri_path_selector, RequestSelector,
+    proxy::{
+        rate_limiting::{
+            multi::{MultiRaterConfig, MultiRequestKeyKind},
+            single::{SingleInstanceConfig, SingleRequestKeyKind},
+            AllRateConfig, RegexShim,
+        },
+        request_selector::{
+            null_selector, source_addr_and_uri_path_selector, uri_path_selector, RequestSelector,
+        },
     },
 };
+use kdl::{KdlDocument, KdlEntry, KdlNode, KdlValue};
+use miette::{bail, Diagnostic, SourceSpan};
+use pingora::{protocols::ALPN, upstreams::peer::HttpPeer};
+
+use super::internal::RateLimitingConfig;
 
 #[cfg(test)]
 mod test;
@@ -33,7 +41,7 @@ impl TryFrom<KdlDocument> for Config {
             upgrade_socket,
             pid_file,
         } = extract_system_data(&value)?;
-        let (basic_proxies, file_servers) = extract_services(&value)?;
+        let (basic_proxies, file_servers) = extract_services(threads_per_service, &value)?;
 
         Ok(Config {
             threads_per_service,
@@ -67,12 +75,14 @@ impl Default for SystemData {
 
 /// Extract all services from the top level document
 fn extract_services(
+    threads_per_service: usize,
     doc: &KdlDocument,
 ) -> miette::Result<(Vec<ProxyConfig>, Vec<FileServerConfig>)> {
     let service_node = utils::required_child_doc(doc, doc, "services")?;
     let services = utils::wildcard_argless_child_docs(doc, service_node)?;
 
-    let proxy_node_set = HashSet::from(["listeners", "connectors", "path-control"]);
+    let proxy_node_set =
+        HashSet::from(["listeners", "connectors", "path-control", "rate-limiting"]);
     let file_server_node_set = HashSet::from(["listeners", "file-server"]);
 
     let mut proxies = vec![];
@@ -96,7 +106,7 @@ fn extract_services(
         if fingerprint_set.is_subset(&proxy_node_set) {
             // If the contained nodes are a strict subset of proxy node config fields,
             // then treat this section as a proxy node
-            proxies.push(extract_service(doc, name, service)?);
+            proxies.push(extract_service(threads_per_service, doc, name, service)?);
         } else if fingerprint_set.is_subset(&file_server_node_set) {
             // If the contained nodes are a strict subset of the file server config
             // fields, then treat this section as a file server node
@@ -221,6 +231,7 @@ fn extract_file_server(
 
 /// Extracts a single service from the `services` block
 fn extract_service(
+    threads_per_service: usize,
     doc: &KdlDocument,
     name: &str,
     node: &KdlDocument,
@@ -281,13 +292,135 @@ fn extract_service(
         }
     }
 
+    // Rate limiting
+    let mut rl = RateLimitingConfig::default();
+    if let Some(rl_node) = utils::optional_child_doc(doc, node, "rate-limiting") {
+        let nodes = utils::data_nodes(doc, rl_node)?;
+        for (node, name, args) in nodes.iter() {
+            if *name == "rule" {
+                let vals = utils::str_value_args(doc, args)?;
+                let valslice = vals
+                    .iter()
+                    .map(|(k, v)| (*k, v.value()))
+                    .collect::<BTreeMap<&str, &KdlValue>>();
+                rl.rules
+                    .push(make_rate_limiter(threads_per_service, doc, node, valslice)?);
+            } else {
+                return Err(
+                    Bad::docspan(format!("Unknown name: '{name}'"), doc, node.span()).into(),
+                );
+            }
+        }
+    }
+
     Ok(ProxyConfig {
         name: name.to_string(),
         listeners: list_cfgs,
         upstreams: conn_cfgs,
         path_control: pc,
         upstream_options: load_balance.unwrap_or_default(),
+        rate_limiting: rl,
     })
+}
+
+fn make_rate_limiter(
+    threads_per_service: usize,
+    doc: &KdlDocument,
+    node: &KdlNode,
+    args: BTreeMap<&str, &KdlValue>,
+) -> miette::Result<AllRateConfig> {
+    let take_num = |key: &str| -> miette::Result<usize> {
+        let Some(val) = args.get(key) else {
+            return Err(Bad::docspan(format!("Missing key: '{key}'"), doc, node.span()).into());
+        };
+        let Some(val) = val.as_i64().and_then(|v| usize::try_from(v).ok()) else {
+            return Err(Bad::docspan(
+                format!(
+                    "'{key} should have a positive integer value, got '{:?}' instead",
+                    val
+                ),
+                doc,
+                node.span(),
+            )
+            .into());
+        };
+        Ok(val)
+    };
+    let take_str = |key: &str| -> miette::Result<&str> {
+        let Some(val) = args.get(key) else {
+            return Err(Bad::docspan(format!("Missing key: '{key}'"), doc, node.span()).into());
+        };
+        let Some(val) = val.as_string() else {
+            return Err(Bad::docspan(
+                format!("'{key} should have a string value, got '{:?}' instead", val),
+                doc,
+                node.span(),
+            )
+            .into());
+        };
+        Ok(val)
+    };
+
+    // mandatory/common fields
+    let kind = take_str("kind")?;
+    let tokens_per_bucket = take_num("tokens-per-bucket")?;
+    let refill_qty = take_num("refill-qty")?;
+    let refill_rate_ms = take_num("refill-rate-ms")?;
+
+    let multi_cfg = || -> miette::Result<MultiRaterConfig> {
+        let max_buckets = take_num("max-buckets")?;
+        Ok(MultiRaterConfig {
+            threads: threads_per_service,
+            max_buckets,
+            max_tokens_per_bucket: tokens_per_bucket,
+            refill_interval_millis: refill_rate_ms,
+            refill_qty,
+        })
+    };
+
+    let single_cfg = || SingleInstanceConfig {
+        max_tokens_per_bucket: tokens_per_bucket,
+        refill_interval_millis: refill_rate_ms,
+        refill_qty,
+    };
+
+    let regex_pattern = || -> miette::Result<RegexShim> {
+        let pattern = take_str("pattern")?;
+        let Ok(pattern) = RegexShim::new(pattern) else {
+            return Err(Bad::docspan(
+                format!("'{pattern} should be a valid regular expression"),
+                doc,
+                node.span(),
+            )
+            .into());
+        };
+        Ok(pattern)
+    };
+
+    match kind {
+        "source-ip" => Ok(AllRateConfig::Multi {
+            kind: MultiRequestKeyKind::SourceIp,
+            config: multi_cfg()?,
+        }),
+        "specific-uri" => Ok(AllRateConfig::Multi {
+            kind: MultiRequestKeyKind::Uri {
+                pattern: regex_pattern()?,
+            },
+            config: multi_cfg()?,
+        }),
+        "any-matching-uri" => Ok(AllRateConfig::Single {
+            kind: SingleRequestKeyKind::UriGroup {
+                pattern: regex_pattern()?,
+            },
+            config: single_cfg(),
+        }),
+        other => Err(Bad::docspan(
+            format!("'{other} is not a known kind of rate limiting"),
+            doc,
+            node.span(),
+        )
+        .into()),
+    }
 }
 
 /// Extracts the `load-balance` structure from the `connectors` section

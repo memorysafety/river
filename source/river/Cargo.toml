@@ -24,17 +24,19 @@ rustdoc-args = ["--cfg", "doc_cfg"]
 
 [dependencies]
 async-trait = "0.1.79"
+cidr = "0.2.3"
+concread = "0.5.3"
+futures-util = "0.3.30"
+http = "1.0.0"
+kdl = "4.6.0"
+leaky-bucket = "1.1.2"
 log = "0.4.21"
+miette = { version = "5.10.0", features = ["fancy"] }
 regex = "1.10.4"
+thiserror = "1.0.61"
 tokio = "1.37.0" # TODO: check for implicit feature usage
 toml = "0.8.12"
 tracing = "0.1.40"
-kdl = "4.6.0"
-miette = { version = "5.10.0", features = ["fancy"] }
-thiserror = "1.0.61"
-http = "1.0.0"
-futures-util = "0.3.30"
-cidr = "0.2.3"
 
 [dependencies.static-files-module]
 version = "0.2"

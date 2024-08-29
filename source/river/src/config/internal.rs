@@ -14,7 +14,10 @@ use pingora::{
 };
 use tracing::warn;
 
-use crate::proxy::request_selector::{null_selector, RequestSelector};
+use crate::proxy::{
+    rate_limiting::AllRateConfig,
+    request_selector::{null_selector, RequestSelector},
+};
 
 /// River's internal configuration
 #[derive(Debug, Clone)]
@@ -109,6 +112,12 @@ impl Config {
     }
 }
 
+///
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct RateLimitingConfig {
+    pub(crate) rules: Vec<AllRateConfig>,
+}
+
 /// Add Path Control Modifiers
 ///
 /// Note that we use `BTreeMap` and NOT `HashMap`, as we want to maintain the
@@ -141,6 +150,7 @@ pub struct ProxyConfig {
     pub(crate) upstream_options: UpstreamOptions,
     pub(crate) upstreams: Vec<HttpPeer>,
     pub(crate) path_control: PathControl,
+    pub(crate) rate_limiting: RateLimitingConfig,
 }
 
 #[derive(Debug, PartialEq, Clone)]
