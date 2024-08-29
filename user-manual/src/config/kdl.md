@@ -338,12 +338,12 @@ Once a refill occurs, requests may become ready if a token becomes available.
 ##### How many buckets?
 
 Some rules require many buckets. For example, rules based on the source IP address will create a bucket
-for each unique IP address of downstream users.
+for each unique source IP address observed in a request.
 
 However, each of these buckets require space to contain the metadata, and to avoid unbounded growth,
 we allow for a configurable `max-buckets` number, which serves to influence the total memory required
 for storing buckets. This uses an [Adaptive Replacement Cache]
-to allow for concurrent access to these buckets, as well as the ability to automatically buckets that
+to allow for concurrent access to these buckets, as well as the ability to automatically evict buckets that
 are not actively being used (somewhat similar to an LRU or "Least Recently Used" cache).
 
 [Adaptive Replacement Cache]: https://docs.rs/concread/latest/concread/arcache/index.html
