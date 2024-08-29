@@ -42,8 +42,8 @@ services {
         // the `source-ip` rule.
         //
         // A request to URI `/static/style.css` from IP 1.2.3.4 will need to get a token from
-        // BOTH the `source-ip` rule (from the `1.2.3.4` bucket), AND the `uri` rule (from the
-        // `/static/style.css` bucket)
+        // BOTH the `source-ip` rule (from the `1.2.3.4` bucket), AND the `specific-uri` rule
+        // (from the `/static/style.css` bucket)
         rate-limiting {
             // This rate limiting rule is based on the source IP address
             //
