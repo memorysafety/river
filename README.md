@@ -4,32 +4,10 @@
 
 ## Current State
 
-We reached the [initial v0.2.0 release] at the end of April (and a small [v0.2.1 release]
-for crates.io availability in May), completing the work in [Kickstart Spike 1].
+River is currently v0.5.0. See the [v0.5.0 release notes] for more details on recently
+added features.
 
-As of the end of May, work towards the next features in [Kickstart Spike 2] has begun.
-
-The next work is focused on:
-
-1. Development of "multiple upstream" features, including:
-    * Supporting Load Balancing of upstream servers
-    * Supporting Health Checks of upstream servers
-    * Supporting Service Discovery of upstream servers
-2. Developer and Operator Quality of Life features, including:
-    * Supporting basic static HTML file serving
-    * Supporting semi-dynamic observability endpoints, e.g. for Prometheus polling
-    * Support for hot-reloading of configuration
-    * CI for build and test checks on pull requests
-3. Development of initial Robustness features, including:
-    * Rate limiting of connections and/or requests
-    * CIDR/API range-based filtering for rejecting connections
-
-Stay tuned for updates on these features!
-
-[initial v0.2.0 release]: https://github.com/memorysafety/river/releases/tag/v0.2.0
-[v0.2.1 release]: https://github.com/memorysafety/river/releases/tag/v0.2.1
-[Kickstart Spike 1]: https://github.com/memorysafety/river/milestone/1
-[Kickstart Spike 2]: https://github.com/memorysafety/river/milestone/3
+[v0.5.0 release notes]: https://github.com/memorysafety/river/blob/main/docs/release-notes/2024-08-30-v0.5.0.md
 
 **Until further notice, there is no expectation of stability.**
 
@@ -39,11 +17,11 @@ At the moment, `river` can be invoked from the command line. See `--help` for
 all options.
 
 Configuration is currently done exclusively via configuration file. See
-[`test-config.toml`] for an example configuration file. Additionally, see
-[`toml-configuration.md`] for more configuration details.
+[`test-config.kdl`] for an example configuration file. Additionally, see
+[kdl configuration] for more configuration details.
 
-[`test-config.toml`]: ./source/river/assets/test-config.toml
-[`toml-configuration.md`]: ./docs/toml-configuration.md
+[`test-config.kdl`]: ./source/river/assets/test-config.kdl
+[kdl configuration]: https://onevariable.com/river-user-manual/config/kdl.html
 
 ## License
 
