@@ -14,39 +14,46 @@ This work took place over the course of April 2024. The goals of this milestone 
 
 For more information: https://github.com/memorysafety/river/blob/main/docs/release-notes/2024-04-29-v0.2.0.md
 
-## In Progress Milestones
+### "Kickstart Spike 2" / v0.5.0
 
-### "Spike 2.1" / v0.3.x
+This work took place over the course of June-August 2024.
 
-This is the first part of work intended to take place during June and July 2024.
+For more information: https://github.com/memorysafety/river/blob/main/docs/release-notes/2024-08-30-v0.5.0.md
 
-This work is focused on "load balancing" use cases, including:
+#### "Spike 2.1"
+
+This work was focused on "load balancing" use cases, including:
 
 1. Supporting Load Balancing of upstream servers
 2. Supporting Health Checks of upstream servers
 3. Supporting Service Discovery of upstream servers
 
-This work is in progress, and is wrapping up shortly.
+#### "Spike 2.2"
 
-### "Spike 2.2" / v0.4.x
-
-This is the second part of work intended to take place during June and July 2024.
-
-This work is focused on "Developer and Operator Quality of Life" features, including:
+This work was focused on "Developer and Operator Quality of Life" features, including:
 
 1. Supporting basic static HTML file serving
-2. Supporting semi-dynamic observability endpoints, e.g. for Prometheus polling
+2. ~~Supporting semi-dynamic observability endpoints, e.g. for Prometheus polling~~
+    * This work was de-scheduled and not included in v0.5.0
 3. Support for hot-reloading of configuration
 4. CI for build and test checks on pull requests
 
-### "Spike 2.3" / v0.5.x
+#### "Spike 2.3"
 
-This is the third and final part of work intended to take place during June and July 2024.
-
-This work is focused on "initial Robustness" features, including:
+This work was focused on "initial Robustness" features, including:
 
 1. Rate limiting of connections and/or requests
 2. CIDR/API range-based filtering for rejecting connections
+
+#### "Spike 2 - Bonus"
+
+This work was not planned but occurred as part of the v0.5.0, but happened.
+
+1. Adoption of the KDL language for configuration
+2. Development of the [River User Manual]
+3. Support for HTTP2 connection to downstream clients and upstream servers
+
+[River User Manual]: https://onevariable.com/river-user-manual/
 
 ## Future Milestones - towards 1.0
 
@@ -188,6 +195,8 @@ the other existing milestones:
       are consistent with each other
     * Ensure emitted logs, metrics, and tracing data is consistent and readable
       for operators
+* Review of log customization and filtering
+    * See https://github.com/memorysafety/river/issues/58 for more details
 
 ### Release / v1.x.x
 
