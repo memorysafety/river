@@ -214,6 +214,9 @@ impl Modifiers {
                 "upsert-header" => {
                     Box::new(request_modifiers::UpsertHeader::from_settings(filter).unwrap())
                 }
+                "url-rewrite" => {
+                    Box::new(request_modifiers::PathRewrite::from_settings(filter).unwrap())
+                }
                 other => {
                     tracing::warn!("Unknown upstream request filter: '{other}'");
                     return Err(Error::new(ErrorType::Custom("Bad configuration")));

@@ -96,6 +96,7 @@ services {
             upstream-request {
                 filter kind="remove-header-key-regex" pattern=".*(secret|SECRET).*"
                 filter kind="upsert-header" key="x-proxy-friend" value="river"
+                filter kind="url-rewrite" regex="^/rewrite/(.*)$" rewrite="/${1}"
             }
             upstream-response {
                 filter kind="remove-header-key-regex" pattern=".*ETag.*"

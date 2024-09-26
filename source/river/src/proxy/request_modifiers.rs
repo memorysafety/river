@@ -1,6 +1,8 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, str::FromStr};
 
 use async_trait::async_trait;
+use http::{uri::PathAndQuery, Uri};
+use log::info;
 use pingora_core::{Error, Result};
 use pingora_http::RequestHeader;
 use pingora_proxy::Session;
@@ -110,5 +112,50 @@ impl RequestModifyMod for UpsertHeader {
         header.append_header(self.key.clone(), &self.value)?;
         tracing::debug!("Inserted header: {}: {}", self.key, self.value);
         Ok(())
+    }
+}
+
+pub struct PathRewrite {
+    regex: Regex,
+    rewrite: String,
+}
+
+impl PathRewrite {
+    // Create from settings
+    pub fn from_settings(mut settings: BTreeMap<String, String>) -> Result<Self> {
+        let regex = extract_val("regex", &mut settings)?;
+        let regex = Regex::from_str(regex.as_str()).expect("Unable to parse regex for rewrite.");
+        let rewrite = extract_val("rewrite", &mut settings)?;
+
+        Ok(Self {
+            regex,
+            rewrite: rewrite.clone(),
+        })
+    }
+}
+
+#[async_trait]
+impl RequestModifyMod for PathRewrite {
+    async fn upstream_request_filter(
+        &self,
+        _session: &mut Session,
+        header: &mut RequestHeader,
+        _ctx: &mut RiverContext,
+    ) -> Result<()> {
+        let path = header.uri.path();
+        match self.regex.is_match(path) {
+            false => Ok(()),
+            true => {
+                let rewrite = self.regex.replace(path, self.rewrite.as_str());
+
+                let rewritten_uri = Uri::builder()
+                    .path_and_query(PathAndQuery::from_str(&rewrite.to_string()).unwrap())
+                    .build();
+
+                header.set_uri(rewritten_uri.unwrap());
+
+                Ok(())
+            }
+        }
     }
 }
