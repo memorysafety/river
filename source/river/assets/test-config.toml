@@ -63,6 +63,8 @@ name = "Example1"
     # Filters are applied in the order they are specified. Multiple instances of
     # each filter may be provided.
     upstream-request-filters = [
+        # Url rewrite to
+        { kind = "url-rewrite", regex = "^/rewrite/(.*)$", rewrite = "/${1}" },
         # Remove any headers with keys matching `pattern`
         { kind = "remove-header-key-regex", pattern = ".*(secret|SECRET).*" },
         # Add or replace (e.g. "Upsert") a fixed header with the given key and value
