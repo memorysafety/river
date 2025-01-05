@@ -129,6 +129,10 @@ services {
             //
             // All files within the root will be available
             base-path "."
+            // Redirect to an index file on URI like "/" GET, can include multiple options
+            //
+            // This is optional.
+            index-file "index.html"
         }
     }
 }

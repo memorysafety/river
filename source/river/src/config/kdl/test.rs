@@ -168,6 +168,7 @@ fn load_test() {
                 },
             ],
             base_path: Some(".".into()),
+            index_file: vec!["index.html".to_string()],
         }],
         daemonize: false,
         pid_file: Some("/tmp/river.pidfile".into()),
@@ -209,10 +210,12 @@ fn load_test() {
             name,
             listeners,
             base_path,
+            index_file,
         } = afs;
         assert_eq!(*name, efs.name);
         assert_eq!(*listeners, efs.listeners);
         assert_eq!(*base_path, efs.base_path);
+        assert_eq!(*index_file, efs.index_file);
     }
 }
 

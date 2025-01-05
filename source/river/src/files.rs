@@ -18,7 +18,7 @@ pub fn river_file_server(
     let fsconf = StaticFilesConf {
         root: conf.base_path,
         canonicalize_uri: true,
-        index_file: Vec::new().into(),
+        index_file: conf.index_file.into(),
         page_404: None,
         precompressed: Vec::new().into(),
         ..Default::default()

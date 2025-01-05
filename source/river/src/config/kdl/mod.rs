@@ -222,10 +222,22 @@ fn extract_file_server(
         None
     };
 
+    // Index File
+    //
+    let index_file = if let Some((_ifnode, ifargs)) = map.get("index-file") {
+        ifargs
+            .iter()
+            .filter_map(|arg| arg.value().as_string().map(ToOwned::to_owned))
+            .collect()
+    } else {
+        vec![]
+    };
+
     Ok(FileServerConfig {
         name: name.to_string(),
         listeners: list_cfgs,
         base_path,
+        index_file,
     })
 }
 

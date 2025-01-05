@@ -135,6 +135,7 @@ pub struct PathControl {
 #[derive(Debug, Clone)]
 pub struct FileServerConfig {
     pub(crate) name: String,
+    pub(crate) index_file: Vec<String>,
     pub(crate) listeners: Vec<ListenerConfig>,
     pub(crate) base_path: Option<PathBuf>,
 }
