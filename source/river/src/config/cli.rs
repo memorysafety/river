@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 /// River: A reverse proxy from Prossimo
 #[derive(Parser, Debug)]
+#[clap(version)]
 pub struct Cli {
     /// Validate all configuration data and exit
     #[arg(long)]
