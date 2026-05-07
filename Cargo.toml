@@ -50,11 +50,11 @@ rev = "a98eadde498a45f32ab906d629342954fa173d11"
 # path = "../pingora/pingora-proxy"
 
 [patch.crates-io.static-files-module]
-git = "https://github.com/pandora-web-server/pandora-web-server.git"
+git = "https://codeberg.org/palant/pandora-web-server.git"
 rev = "fe5d7dfc7d943d2bd8371309084a775db99e84f0"
 # path = "../pandora-web-server/static-files-module"
 
 [patch.crates-io.pandora-module-utils]
-git = "https://github.com/pandora-web-server/pandora-web-server.git"
+git = "https://codeberg.org/palant/pandora-web-server.git"
 rev = "fe5d7dfc7d943d2bd8371309084a775db99e84f0"
 # path = "../pandora-web-server/pandora-module-utils"
